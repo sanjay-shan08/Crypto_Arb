@@ -101,7 +101,7 @@ BitgetWebSocketClient ──► PriceCache (ConcurrentHashMap)
 
 | Structure | Type | Owner | Purpose |
 |---|---|---|---|
-| `PriceCache` | `ConcurrentHashMap<String, BigDecimal>` | Market Data Layer | Latest prices per trading pair |
+| `PriceCache` | `ConcurrentHashMap<String, PriceEntry>` | Market Data Layer | Latest bid/ask prices per trading pair |
 | `SignalQueue` | `LinkedBlockingQueue<Signal>` | Engine Layer | Decouples detection from execution |
 | `Signal` | Record/POJO | Engine Layer | Contains route, prices, expected profit, timestamp |
 | `OrderResult` | Record/POJO | Executor Layer | Contains orderId, status, filled quantity, price |
@@ -117,6 +117,7 @@ BitgetWebSocketClient ──► PriceCache (ConcurrentHashMap)
 | Engine Thread | `ScheduledExecutorService` — fires every 100ms, reads `PriceCache`, calculates routes, enqueues signals |
 | Executor Thread | Blocks on `SignalQueue.take()`, processes signals sequentially |
 | Reconnect Thread | Handles exponential backoff reconnection logic |
+| Network Monitor Thread | Pings Bitget REST API every 30s, pauses/resumes engine if latency crosses threshold |
 
 ---
 
@@ -135,6 +136,14 @@ Configuration is loaded from environment variables and/or a `config.properties` 
 | `heartbeat.timeout.ms` | `5000` | Stale data timeout |
 | `min.profit.bps` | `5` | Minimum profit in basis points |
 | `max.position.usdt` | `1000` | Maximum position size in USDT |
+| `exchange.fee.rate` | `0.001` | Per-trade fee (0.10% default, 0.0008 with BGB) |
+| `exchange.fee.legs` | `3` | Number of legs (for total fee calculation) |
+| `triangles` | `SOL/BTC/USDT,XRP/BTC/USDT,...` | Comma-separated triangle definitions |
+| `network.max.latency.ms` | `400` | Max acceptable round-trip latency (ms) |
+| `network.check.interval.s` | `30` | Interval between runtime latency checks |
+| `network.preflight.samples` | `5` | Number of pings during startup preflight |
+| `network.runtime.samples` | `3` | Number of pings per runtime check |
+| `network.ping.endpoint` | `/api/v2/public/time` | Lightweight endpoint for latency measurement |
 
 ---
 
@@ -156,6 +165,43 @@ Configuration is loaded from environment variables and/or a `config.properties` 
 
 ---
 
+## 8.5 Target Triangles
+
+The bot targets **altcoin triangles** where opportunity windows last 5–30+ seconds,
+avoiding major pairs (BTC/ETH/USDT) where HFT bots dominate with 2–5 second windows.
+
+| Triangle | Window Duration | Viability |
+|---|---|---|
+| SOL / BTC / USDT | 5–15 sec | ✅ Primary target |
+| XRP / BTC / USDT | 5–20 sec | ✅ Primary target |
+| DOGE / BTC / USDT | 8–25 sec | ✅ Primary target |
+| TRX / BTC / USDT | 10–30 sec | ✅ Comfortable |
+| BGB / BTC / USDT | 10–30 sec | ✅ Also cuts fees via BGB holdings |
+| BTC / ETH / USDT | 2–5 sec | ⚠️ Avoid — too competitive |
+
+Triangles are configurable in `config.properties` so new ones can be added without code changes.
+
+---
+
+## 8.6 Latency Budget (Tiruppur → Bitget Singapore)
+
+| Phase | Latency |
+|---|---|
+| WebSocket detect | ~0ms (streaming) |
+| Java signal calculation | ~0.1ms (JIT compiled) |
+| REST leg 1 (round-trip) | ~150ms |
+| Fill confirmation wait | ~50–100ms |
+| REST leg 2 (round-trip) | ~150ms |
+| Fill confirmation wait | ~50–100ms |
+| REST leg 3 (round-trip) | ~150ms |
+| Fill confirmation wait | ~50–100ms |
+| **Total (best case)** | **~600ms** |
+| **Total (average case)** | **~900ms** |
+| **Total (with connection pooling)** | **~650ms** |
+
+> The floor is set by network physics, not code. Connection pooling is the biggest
+> free optimization (~180ms saved).
+
 ## 9. Safety Invariants
 
 These must **never** be violated:
@@ -165,6 +211,7 @@ These must **never** be violated:
 3. **Clean startup** — `StartupChecker` cancels all stale orders before the engine starts.
 4. **Rejected signals are re-queued, never dropped** — A risk rejection is temporary; the condition may clear on the next tick.
 5. **BigDecimal everywhere** — No `double` or `float` for any financial calculation.
+6. **No high-latency trading** — If average round-trip to Bitget exceeds `network.max.latency.ms`, the engine is paused until latency recovers. At startup, the bot refuses to run at all.
 
 ---
 
@@ -197,7 +244,8 @@ Bitget_Arb/
 │                       │   └── SignalQueue.java
 │                       ├── risk/
 │                       │   ├── RiskGate.java
-│                       │   └── StartupChecker.java
+│                       │   ├── StartupChecker.java
+│                       │   └── NetworkChecker.java
 │                       ├── executor/
 │                       │   ├── OrderExecutor.java
 │                       │   ├── PaperExecutor.java

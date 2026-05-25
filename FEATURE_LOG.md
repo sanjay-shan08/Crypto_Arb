@@ -26,6 +26,73 @@ Each entry follows this format:
 
 ---
 
+### [2026-05-26] DECISION: Network Quality Gate (NetworkChecker)
+**Status**: 📋 Planned
+**Files**: `NetworkChecker.java`, `ARCHITECTURE.md`, `PROJECT_CONTEXT.md`
+**Details**:
+Added a two-phase network quality gate to prevent trading on degraded internet:
+
+**Phase 1 — Startup preflight:**
+- Pings Bitget's `/api/v2/public/time` endpoint 5 times before engine start.
+- If average round-trip > 400ms → refuses to start. Bot exits with error.
+- Rationale: with 3 sequential REST legs, 400ms × 3 = 1200ms execution — too slow for even altcoin windows (5–30s) once you factor in fill confirmation and price movement risk.
+
+**Phase 2 — Runtime monitoring:**
+- Every 30 seconds, pings 3 times and checks rolling average.
+- If latency spikes above threshold → pauses ArbitrageEngine (stops tick scheduler).
+- WebSocket stays connected (prices keep updating) so the bot can resume instantly.
+- When latency recovers below threshold → resumes engine automatically.
+
+**Design decisions:**
+- Uses `GET /api/v2/public/time` — lightweight, no auth, measures real network path.
+- Uses the same `OkHttpClient` with connection pooling so measurements reflect actual trading conditions.
+- Threshold of 400ms chosen because: 400ms × 3 legs + fill waits ≈ 1500ms total, which approaches the low end of altcoin opportunity windows.
+- Pausing (not killing) the engine means zero restart cost when latency recovers.
+
+---
+
+### [2026-05-26] DECISION: Altcoin Triangles as Primary Targets
+**Status**: ✅ Done
+**Files**: `PROJECT_CONTEXT.md`, `ARCHITECTURE.md`
+**Details**:
+Based on analysis of opportunity window durations and execution latency from
+Tiruppur (~650–900ms), decided to target altcoin triangles (SOL, XRP, DOGE, TRX, BGB)
+where windows last 5–30+ seconds. BTC/ETH/USDT triangle (2–5 second windows) is
+excluded from default config — too competitive against co-located HFT bots.
+
+---
+
+### [2026-05-26] DECISION: Multi-Triangle Engine Design
+**Status**: ✅ Done
+**Files**: `ARCHITECTURE.md`
+**Details**:
+ArbitrageEngine redesigned to iterate over a configurable list of triangles each tick,
+rather than a single hardcoded BTC/ETH/USDT triangle. Introduces `Triangle` model class
+and makes `RouteCalculator` accept a triangle parameter. This is the core competitive
+advantage — scanning obscure altcoin triangles that large players ignore.
+
+---
+
+### [2026-05-26] FEAT: OkHttp Connection Pooling Specification
+**Status**: ✅ Done
+**Files**: `ARCHITECTURE.md`, `CODING_RULES.md`
+**Details**:
+Explicitly specified `ConnectionPool(5, 5, TimeUnit.MINUTES)` config for OkHttp.
+This is the single biggest free optimization: saves ~60ms per REST call (~180ms total
+across 3 legs) by reusing TCP connections instead of establishing new ones.
+
+---
+
+### [2026-05-26] FEAT: PaperExecutor Latency Simulation
+**Status**: ✅ Done
+**Files**: `ARCHITECTURE.md`, `CODING_RULES.md`
+**Details**:
+PaperExecutor now simulates ~200ms network delay per leg to produce realistic timing
+in paper-trade P&L logs. Added exception to banned `Thread.sleep()` rule specifically
+for this use case.
+
+---
+
 ### [2025-05-25] DOCS: Project Foundation Documents Created
 **Status**: ✅ Done
 **Files**: `PROJECT_CONTEXT.md`, `ARCHITECTURE.md`, `CODING_RULES.md`, `FEATURE_LOG.md`

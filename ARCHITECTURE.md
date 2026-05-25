@@ -28,6 +28,7 @@ The bot is a **four-layer pipeline** with strict unidirectional data flow:
 │                          RISK LAYER                             │
 │  RiskGate (accept / reject+requeue)                            │
 │  StartupChecker (boot-time only)                               │
+│  NetworkChecker (latency monitor)                              │
 │  Package: com.arb.bitget.risk                                  │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ approved Signal
@@ -98,20 +99,28 @@ long getLastUpdateTime();              // epoch millis
 ##### `ArbitrageEngine`
 - Runs on `ScheduledExecutorService` at a **fixed rate of 100ms**.
 - Each tick:
-  1. Reads all relevant prices from `PriceCache`.
-  2. Passes prices to `RouteCalculator.calculate()`.
-  3. If either route is profitable → creates a `Signal` → enqueues it on `SignalQueue`.
+  1. Iterates over all configured triangles (e.g., SOL/BTC/USDT, XRP/BTC/USDT, etc.).
+  2. For each triangle, reads relevant prices from `PriceCache`.
+  3. Passes prices to `RouteCalculator.calculate(triangle)`.
+  4. If either route is profitable → creates a `Signal` → enqueues it on `SignalQueue`.
 - Exposes `start()`, `stop()`, `kill()` lifecycle methods.
 - `kill()` is called by `HeartbeatMonitor` — cancels the scheduled task immediately.
 
 ##### `RouteCalculator`
 - Pure function — no state, no side effects.
-- Calculates two routes for a triangle (e.g., BTC/USDT/ETH):
-  - **Route A**: USDT → BTC → ETH → USDT
-  - **Route B**: USDT → ETH → BTC → USDT
+- Accepts a `Triangle` object defining the 3 pairs to evaluate.
+- Calculates two routes for any given triangle (e.g., SOL/BTC/USDT):
+  - **Route A**: USDT → ALT → BTC → USDT
+  - **Route B**: USDT → BTC → ALT → USDT
 - All math uses `BigDecimal` with `RoundingMode.HALF_UP` and scale of 8.
 - Returns a `RouteResult` containing: route direction, expected profit (bps), leg prices, leg quantities.
-- Applies exchange fee deduction (Bitget spot fee: 0.1% maker/taker by default).
+- Applies exchange fee deduction (Bitget spot fee: 0.1% maker/taker by default, 0.08% with BGB).
+
+##### `Triangle` (model class)
+- Immutable record defining a triangular path: `Triangle(String pairA, String pairB, String pairC)`.
+- Example: `new Triangle("SOLUSDT", "SOLBTC", "BTCUSDT")`.
+- Configured via `config.properties` — new triangles can be added without code changes.
+- `PriceCache` subscribes to ticker channels for **all pairs across all configured triangles**.
 
 ##### `SignalQueue`
 - Thin wrapper around `LinkedBlockingQueue<Signal>`.
@@ -157,6 +166,15 @@ record Signal(
 - Logs every cancelled order with orderId and pair.
 - Only after `StartupChecker.run()` completes does `Main.java` start the engine.
 
+##### `NetworkChecker`
+- Measures REST API round-trip latency to Bitget servers.
+- **At startup**: Runs before the engine starts. Sends 5 pings to `GET /api/v2/public/time` (Bitget's server-time endpoint — lightweight, no auth required). Calculates average round-trip.
+- **If average latency > `MAX_ACCEPTABLE_LATENCY_MS` (default: 400ms)** → refuses to start. Logs CRITICAL with measured latency and threshold. Exits with non-zero code.
+- **During operation**: Runs on a scheduled thread every 30 seconds. Sends 3 pings, calculates rolling average.
+- **If runtime latency exceeds threshold** → pauses `ArbitrageEngine` (stops the scheduled tick). Does NOT close WebSocket (prices keep updating). Resumes automatically when next check passes.
+- **If latency recovers below threshold** → resumes engine, logs INFO with recovered latency.
+- Uses the same `OkHttpClient` instance as the executor (connection-pooled) so measurements reflect real trading conditions.
+
 #### Rejection Flow
 ```
 SignalQueue
@@ -195,6 +213,8 @@ All three implementations are **drop-in replacements** — same interface, same 
 - Returns a synthetic `OrderResult` with `FILLED` status.
 - Useful for strategy validation without any API calls.
 - Simulates fill at the requested price (no slippage simulation).
+- **Simulates ~200ms network delay** per leg via `Thread.sleep(200)` to produce
+  realistic timing for paper-trade P&L analysis.
 
 ##### `SandboxExecutor`
 - Makes **real HTTP calls** to Bitget's sandbox/testnet endpoints.
@@ -205,6 +225,8 @@ All three implementations are **drop-in replacements** — same interface, same 
 ##### `LiveExecutor`
 - Production executor — real money, real orders.
 - Uses **OkHttp connection pooling** (`ConnectionPool` with keep-alive) for minimum latency.
+- **CRITICAL**: Must configure `ConnectionPool(5, 5, TimeUnit.MINUTES)` — this single
+  config saves ~60ms per leg (~180ms total) by avoiding TCP handshake overhead.
 - Signs requests with HMAC-SHA256 per Bitget API spec.
 - Implements retry logic for transient HTTP errors (429, 500, 503) with limited attempts.
 
@@ -234,6 +256,24 @@ OrderExecutor.executeLeg(leg1)
     └── FAIL → log failure, no position taken, safe
 ```
 
+#### Leg Risk (Key Concept)
+Leg risk is the danger that after leg 1 fills, prices move before leg 2 executes:
+
+```
+0ms     — Opportunity detected
+0.1ms   — Engine calculates profit = +0.4%
+150ms   — Leg 1 sent & filled ✅
+300ms   — Leg 2 sent...
+310ms   — Another bot already moved the price
+320ms   — Leg 2 fills at WORSE price → profit wiped
+```
+
+This is why `AbortHandler` exists: it's the safety net for when leg risk materializes.
+Mitigation strategies:
+- Target altcoin pairs with 5–30 second windows (not BTC/ETH/USDT at 2–5s)
+- Set MIN_SPREAD high enough to absorb worst-case slippage
+- Use connection pooling to minimize the gap between leg executions
+
 ---
 
 ## 3. Module Dependency Graph
@@ -254,7 +294,8 @@ Main.java
     │
     ├── risk/
     │     ├── RiskGate ──► SignalQueue, OrderExecutor
-    │     └── StartupChecker ──► Bitget REST API
+    │     ├── StartupChecker ──► Bitget REST API
+    │     └── NetworkChecker ──► OkHttp, Bitget REST API, ArbitrageEngine
     │
     └── executor/
           ├── OrderExecutor (interface)
@@ -291,10 +332,12 @@ Main.main(String[] args)
     ├── 12. Instantiate BitgetWebSocketClient (references PriceCache, ReconnectHandler)
     │
     ├── 13. Run StartupChecker.run()          ← blocks until stale orders cleaned
-    ├── 14. Connect BitgetWebSocketClient     ← blocks until first price received
-    ├── 15. Start HeartbeatMonitor
-    ├── 16. Start RiskGate consumer thread
-    └── 17. Start ArbitrageEngine             ← 100ms ticks begin
+    ├── 14. Run NetworkChecker.preflight()    ← blocks; aborts if latency > threshold
+    ├── 15. Connect BitgetWebSocketClient     ← blocks until first price received
+    ├── 16. Start HeartbeatMonitor
+    ├── 17. Start RiskGate consumer thread
+    ├── 18. Start NetworkChecker monitor      ← 30s periodic latency checks
+    └── 19. Start ArbitrageEngine             ← 100ms ticks begin
 ```
 
 ---
@@ -326,6 +369,8 @@ Shutdown Hook (SIGINT / SIGTERM)
 | API server error (5xx) | `LiveExecutor` | Retry with backoff (max 3 attempts) |
 | Invalid signal (stale) | `RiskGate` | Drop signal, log warning |
 | Startup stale orders | `StartupChecker` | Cancel all open orders before engine start |
+| High network latency (>400ms) | `NetworkChecker` | Pause engine until latency recovers |
+| Startup latency too high | `NetworkChecker` | Refuse to start, exit with error |
 | Unhandled exception | `Thread.UncaughtExceptionHandler` | Log CRITICAL, attempt graceful shutdown |
 
 ---
@@ -341,4 +386,6 @@ Shutdown Hook (SIGINT / SIGTERM)
 | Trade execution result | `OrderExecutor` | INFO |
 | Abort events | `AbortHandler` | CRITICAL |
 | Reconnection attempts | `ReconnectHandler` | WARN |
+| Network latency (avg ms) | `NetworkChecker` | INFO / CRITICAL |
+| Engine paused (latency) | `NetworkChecker` | WARN |
 | Queue depth | `SignalQueue` | DEBUG |

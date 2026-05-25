@@ -227,6 +227,7 @@ log.info("Trade executed: " + pair + " " + side);  // string concat
 | Rule | Detail |
 |---|---|
 | **One `OkHttpClient` instance** per executor | Reuse connection pool |
+| **Configure `ConnectionPool` explicitly** | `new ConnectionPool(5, 5, TimeUnit.MINUTES)` — saves ~60ms per REST call by reusing TCP connections |
 | **Set timeouts explicitly** | Connect: 5s, Read: 10s, Write: 10s |
 | **Close response bodies** | Always use try-with-resources or `.close()` |
 | **Sign requests correctly** | HMAC-SHA256 per Bitget API v2 spec |
@@ -309,7 +310,7 @@ public class ArbitrageEngine {
 | `double` / `float` for money | `BigDecimal` |
 | `new BigDecimal(double)` | `new BigDecimal("string")` |
 | `System.out.println` | `log.info(...)` |
-| `Thread.sleep()` in production code | `ScheduledExecutorService` |
+| `Thread.sleep()` in production code | `ScheduledExecutorService` (exception: `PaperExecutor` uses `Thread.sleep()` for latency simulation) |
 | Raw `new Thread(...)` | `ExecutorService` with named threads |
 | Setter injection | Constructor injection |
 | `null` return for errors | Throw specific exception or return `Optional` |
