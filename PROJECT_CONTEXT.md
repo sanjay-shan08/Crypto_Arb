@@ -134,10 +134,10 @@ Configuration is loaded from environment variables and/or a `config.properties` 
 | `bitget.rest.url` | `https://api.bitget.com` | REST API base URL |
 | `engine.tick.ms` | `100` | Engine tick interval |
 | `heartbeat.timeout.ms` | `5000` | Stale data timeout |
-| `min.profit.bps` | `5` | Minimum profit in basis points |
+| `min.profit.bps` | `5` | Minimum net profit in basis points (target take-home margin *above* fees) |
 | `max.position.usdt` | `1000` | Maximum position size in USDT |
 | `exchange.fee.rate` | `0.001` | Per-trade fee (0.10% default, 0.0008 with BGB) |
-| `exchange.fee.legs` | `3` | Number of legs (for total fee calculation) |
+| `exchange.fee.legs` | `3` | Number of legs (for total fee calculation, i.e., 3 legs = 0.30% default fee) |
 | `triangles` | `SOL/BTC/USDT,XRP/BTC/USDT,...` | Comma-separated triangle definitions |
 | `network.max.latency.ms` | `400` | Max acceptable round-trip latency (ms) |
 | `network.check.interval.s` | `30` | Interval between runtime latency checks |

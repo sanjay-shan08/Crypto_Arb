@@ -26,6 +26,18 @@ Each entry follows this format:
 
 ---
 
+### [2026-05-29] DECISION: Dynamic Fee-Aware Net Profit Threshold
+**Status**: ✅ Done
+**Files**: `ARCHITECTURE.md`, `PROJECT_CONTEXT.md`
+**Details**:
+Based on user feedback regarding spot trading fees (0.10% per leg / 0.30% total across 3 legs), implemented a **dynamic net profit architecture** rather than a static gross threshold:
+- `RouteCalculator` calculates the gross triangular arbitrage spread, then dynamically deducts the total fee cost: `(exchange.fee.rate * exchange.fee.legs)`.
+- If the BGB fee discount is enabled (reducing fees to 0.08% per leg / 0.24% total), the bot automatically shifts the threshold downwards to take advantage of more opportunities.
+- `RiskGate` checks if the calculated `netExpectedProfit >= MIN_PROFIT_BPS` (where `MIN_PROFIT_BPS` is the user's pure target margin above fees, e.g., 5 bps).
+- This ensures the bot *never* executes a trade where the transaction costs would wipe out the arbitrage spread, prioritizing capital preservation.
+
+---
+
 ### [2026-05-26] DECISION: Network Quality Gate (NetworkChecker)
 **Status**: 📋 Planned
 **Files**: `NetworkChecker.java`, `ARCHITECTURE.md`, `PROJECT_CONTEXT.md`

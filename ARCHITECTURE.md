@@ -114,7 +114,9 @@ long getLastUpdateTime();              // epoch millis
   - **Route B**: USDT → BTC → ALT → USDT
 - All math uses `BigDecimal` with `RoundingMode.HALF_UP` and scale of 8.
 - Returns a `RouteResult` containing: route direction, expected profit (bps), leg prices, leg quantities.
-- Applies exchange fee deduction (Bitget spot fee: 0.1% maker/taker by default, 0.08% with BGB).
+- Calculates **Net Expected Profit (bps)** by explicitly subtracting configured transaction fees:
+  `Net Profit = Gross Profit - (exchange.fee.rate * exchange.fee.legs)`
+  This ensures that transaction costs (0.10% default spot fee per leg, or 0.08% with BGB Bps discount) are fully accounted for before a signal is generated.
 
 ##### `Triangle` (model class)
 - Immutable record defining a triangular path: `Triangle(String pairA, String pairB, String pairC)`.
@@ -153,7 +155,7 @@ record Signal(
 - Consumes signals from `SignalQueue`.
 - Applies checks in order:
   1. **Staleness check**: `now - signal.detectedAt < MAX_SIGNAL_AGE_MS` (e.g., 500ms).
-  2. **Minimum profit check**: `signal.expectedProfit >= MIN_PROFIT_BPS`.
+  2. **Minimum net profit check**: `signal.expectedProfit >= MIN_PROFIT_BPS` (ensures the net profit after all fees is at least the target take-home margin, e.g., 5 bps).
   3. **Position size check**: total exposure ≤ `MAX_POSITION_USDT`.
   4. **Concurrent execution check**: no other trade currently in-flight.
 - **On accept**: passes signal to `OrderExecutor`.
