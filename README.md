@@ -4,6 +4,8 @@ A high-performance, failsafe Java-based trading bot designed to detect and execu
 
 This bot is specifically optimized to target **altcoin triangles** (e.g., SOL, XRP, DOGE, TRX, BGB) where opportunity windows last 5–30+ seconds, avoiding highly competitive major pairs (BTC/ETH).
 
+---
+
 ## 🚀 Key Features
 
 * **Capital Preservation First**: Built with aggressive risk management. The `AbortHandler` immediately liquidates positions if a leg fails, preventing unhedged exposure.
@@ -12,6 +14,9 @@ This bot is specifically optimized to target **altcoin triangles** (e.g., SOL, X
 * **Multi-Triangle Engine**: Scans multiple configurable altcoin triangles concurrently.
 * **Latency Optimized**: Uses explicit OkHttp `ConnectionPool` configurations to save ~180ms per triangular execution.
 * **Precision Math**: Enforces strict `BigDecimal` math (no `float` or `double`) to prevent exchange rejection due to rounding errors.
+* **Fee-Aware Profit Calculation**: Dynamically deducts exchange fees (including BGB discount) before signal generation — never executes a trade where fees would wipe the spread.
+
+---
 
 ## 📋 System Requirements
 
@@ -23,23 +28,191 @@ This bot is specifically optimized to target **altcoin triangles** (e.g., SOL, X
   * IP Whitelisted API Key.
   * **BGB Tokens Held**: Crucial for fee reduction (from 0.10% to 0.08%), which significantly boosts arbitrage profitability.
 
+---
+
+## 🏗️ Architecture
+
+The bot uses a **four-layer pipeline** with strict unidirectional data flow:
+
+```
+Market Data Layer  →  Engine Layer  →  Risk Layer  →  Executor Layer
+(WebSocket + Cache)   (100ms tick)     (Gate/Filter)   (Order Execution)
+```
+
+| Layer | Package | Responsibility |
+|---|---|---|
+| **Market Data** | `com.arb.bitget.market` | WebSocket feed, PriceCache, HeartbeatMonitor, ReconnectHandler |
+| **Engine** | `com.arb.bitget.engine` | ArbitrageEngine (100ms tick), RouteCalculator, SignalQueue |
+| **Risk** | `com.arb.bitget.risk` | RiskGate, StartupChecker, NetworkChecker |
+| **Executor** | `com.arb.bitget.executor` | PaperExecutor, SandboxExecutor, LiveExecutor, AbortHandler |
+
+> For full architectural details, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+---
+
 ## ⚙️ Operational Modes
 
 The bot operates in three distinct modes, controlled via a single `--mode` flag at startup. The business logic remains identical across all modes.
 
-1. **Paper Mode** (`--mode paper`): No real API calls. Simulates ~200ms network latency per leg to produce realistic timing and P&L logs.
-2. **Sandbox Mode** (`--mode sandbox`): Connects to Bitget's Testnet/Sandbox environment. Makes real HTTP calls but uses fake funds.
-3. **Live Mode** (`--mode live`): Connects to production Bitget endpoints. Trades real money.
+| Mode | Flag | API Calls | Real Money | Use Case |
+|---|---|---|---|---|
+| **Paper** | `--mode paper` | ❌ No | ❌ No | Strategy validation with simulated ~200ms latency |
+| **Sandbox** | `--mode sandbox` | ✅ Testnet | ❌ No | Full request/response cycle with fake funds |
+| **Live** | `--mode live` | ✅ Production | ✅ Yes | Real trading with real money |
+
+---
+
+## 🔧 Getting Started
+
+### 1. Prerequisites
+
+```bash
+# Verify Java 21+ is installed
+java --version
+
+# Verify Maven 3.9+ is installed
+mvn --version
+```
+
+### 2. Clone the Repository
+
+```bash
+git clone https://github.com/sanjay-shan08/Crypto_Arb.git
+cd Bitget_Arb
+```
+
+### 3. Configure Credentials
+
+Set your Bitget API credentials as environment variables (**never hardcode them**):
+
+```bash
+# Linux / macOS
+export BITGET_API_KEY="your_api_key"
+export BITGET_API_SECRET="your_api_secret"
+export BITGET_API_PASSPHRASE="your_api_passphrase"
+
+# Windows (PowerShell)
+$env:BITGET_API_KEY="your_api_key"
+$env:BITGET_API_SECRET="your_api_secret"
+$env:BITGET_API_PASSPHRASE="your_api_passphrase"
+```
+
+> ⚠️ **Security**: The `.gitignore` is configured to exclude credential files (`config/application-live.properties`, `config/application-sandbox.properties`) and all `.env` files. **Never commit API keys to version control.**
+
+### 4. Build
+
+```bash
+mvn clean package
+```
+
+### 5. Run
+
+```bash
+# Paper mode (safe — no API calls)
+java -jar target/bitget-arb.jar --mode paper
+
+# Sandbox mode (testnet)
+java -jar target/bitget-arb.jar --mode sandbox
+
+# Live mode (REAL MONEY)
+java -jar target/bitget-arb.jar --mode live
+```
+
+---
+
+## 🎯 Target Triangles
+
+| Triangle | Window Duration | Viability |
+|---|---|---|
+| SOL / BTC / USDT | 5–15 sec | ✅ Primary target |
+| XRP / BTC / USDT | 5–20 sec | ✅ Primary target |
+| DOGE / BTC / USDT | 8–25 sec | ✅ Primary target |
+| TRX / BTC / USDT | 10–30 sec | ✅ Comfortable |
+| BGB / BTC / USDT | 10–30 sec | ✅ Also cuts fees via BGB holdings |
+| BTC / ETH / USDT | 2–5 sec | ⚠️ Avoid — too competitive |
+
+Triangles are configurable in `config/application-*.properties` — new ones can be added without code changes.
+
+---
+
+## 🛡️ Safety Invariants
+
+These rules are **never** violated:
+
+1. **No stale data trading** — Engine killed if no price update for 5 seconds.
+2. **No unhedged positions** — `AbortHandler` fires immediate market-sell if leg 2/3 fails.
+3. **Clean startup** — All stale orders cancelled before engine starts.
+4. **No high-latency trading** — Engine paused if round-trip latency exceeds 400ms.
+5. **BigDecimal everywhere** — No `double` or `float` for financial math.
+6. **Rejected signals re-queued** — Never dropped (with retry limit to prevent infinite loops).
+
+---
+
+## 📁 Project Structure
+
+```
+Bitget_Arb/
+├── pom.xml                              # Maven build config
+├── .gitignore                           # Credential & build artifact exclusions
+├── README.md                            # This file
+├── ARCHITECTURE.md                      # Layer breakdowns, dependency graphs
+├── PROJECT_CONTEXT.md                   # Threading models, config properties
+├── CODING_RULES.md                      # Strict project standards
+├── FEATURE_LOG.md                       # Chronological decision log
+├── config/
+│   ├── application-paper.properties     # Paper mode config (no credentials)
+│   ├── application-sandbox.properties   # Sandbox mode config (⚠️ gitignored)
+│   └── application-live.properties      # Live mode config (⚠️ gitignored)
+└── src/
+    ├── main/
+    │   ├── java/com/arb/bitget/
+    │   │   ├── Main.java                # Entry point, wires all dependencies
+    │   │   ├── config/                  # AppConfig
+    │   │   ├── market/                  # WebSocket, PriceCache, Heartbeat
+    │   │   ├── engine/                  # ArbitrageEngine, RouteCalculator
+    │   │   ├── risk/                    # RiskGate, NetworkChecker
+    │   │   ├── executor/                # Order executors, AbortHandler
+    │   │   └── model/                   # Signal, OrderResult, TradingPair
+    │   └── resources/
+    │       └── logback.xml              # Logging configuration
+    └── test/                            # JUnit 5 + Mockito tests
+```
+
+---
+
+## ⚡ Latency Budget 
+
+| Phase | Latency |
+|---|---|
+| WebSocket detect | ~0ms (streaming) |
+| Signal calculation | ~0.1ms (JIT compiled) |
+| REST leg round-trip (×3) | ~150ms each |
+| Fill confirmation (×3) | ~50–100ms each |
+| **Total (with connection pooling)** | **~650ms** |
+
+> Connection pooling is the biggest free optimization — saves ~180ms by reusing TCP connections.
+
+---
 
 ## 📚 Documentation
 
-For deep-dive technical details, please refer to the core project documents:
+| Document | Description |
+|---|---|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Layer breakdowns, dependency graphs, startup/shutdown sequences |
+| [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) | Threading models, configuration properties, safety invariants |
+| [CODING_RULES.md](./CODING_RULES.md) | Strict project standards, banned patterns, formatting rules |
+| [FEATURE_LOG.md](./FEATURE_LOG.md) | Chronological log of architectural decisions and features |
 
-* [ARCHITECTURE.md](./ARCHITECTURE.md) - Layer breakdowns, dependency graphs, and startup/shutdown sequences.
-* [PROJECT_CONTEXT.md](./PROJECT_CONTEXT.md) - Threading models, configuration properties, and safety invariants.
-* [CODING_RULES.md](./CODING_RULES.md) - Strict project standards, banned patterns, and formatting rules.
-* [FEATURE_LOG.md](./FEATURE_LOG.md) - Chronological log of architectural decisions and features.
+---
 
-## 🛠️ Getting Started
+## ⚠️ Disclaimer
 
-*(Note: The project is currently in the architectural design phase. Development will follow the directory structures defined in `PROJECT_CONTEXT.md`)*
+This bot trades real cryptocurrency. Use at your own risk. The authors are not responsible for any financial losses. Always start with **paper mode** to validate your strategy before risking real funds.
+
+NOTE : The bot is under the testing stage right now and observed great performance in the paper mode. It is expected to perform well in the sandbox mode as well. The live mode is yet to be tested. **DO NOT USE BOT UNTIL ALL STAGES OF TESTING ARE OVER!!!**
+
+---
+
+## 📄 License
+
+This project is private and not licensed for public use.

@@ -1,0 +1,83 @@
+# =============================================================================
+# Bitget Triangular Arbitrage Bot — .gitignore
+# =============================================================================
+
+# --- Credentials & Secrets ---
+# Environment variable files (API keys, secrets, passphrases)
+.env
+.env.*
+*.env
+secrets/
+credentials/
+
+# Config files containing API credentials (keep templates, ignore filled ones)
+config/application-live.properties
+config/application-sandbox.properties
+
+# --- Java / Maven Build Artifacts ---
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+dependency-reduced-pom.xml
+
+# --- IDE Files ---
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# NetBeans
+nbproject/private/
+nbbuild/
+nbdist/
+nb-configuration.xml
+
+# --- OS Files ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Java Specific ---
+hs_err_pid*
+replay_pid*
+.attach_pid*
+
+# --- Misc ---
+*.swp
+*.swo
+*.bak
+*.tmp
+*.orig
