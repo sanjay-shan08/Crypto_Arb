@@ -83,20 +83,20 @@ public class TradeExecutionService {
         Side leg3Side;
 
         if (direction == RouteDirection.ROUTE_A) {
-            // USDT → ALT → BTC → USDT
-            leg1Pair = triangle.altUsdtPair();  // Buy ALT with USDT
+            // BASE → ALT → INTER → BASE
+            leg1Pair = triangle.altBasePair();   // Buy ALT with BASE
             leg1Side = Side.BUY;
-            leg2Pair = triangle.altBtcPair();   // Sell ALT for BTC
+            leg2Pair = triangle.altInterPair();  // Sell ALT for INTER
             leg2Side = Side.SELL;
-            leg3Pair = triangle.btcUsdtPair();  // Sell BTC for USDT
+            leg3Pair = triangle.interBasePair(); // Sell INTER for BASE
             leg3Side = Side.SELL;
         } else {
-            // USDT → BTC → ALT → USDT
-            leg1Pair = triangle.btcUsdtPair();  // Buy BTC with USDT
+            // BASE → INTER → ALT → BASE
+            leg1Pair = triangle.interBasePair(); // Buy INTER with BASE
             leg1Side = Side.BUY;
-            leg2Pair = triangle.altBtcPair();   // Buy ALT with BTC
+            leg2Pair = triangle.altInterPair();  // Buy ALT with INTER
             leg2Side = Side.BUY;
-            leg3Pair = triangle.altUsdtPair();  // Sell ALT for USDT
+            leg3Pair = triangle.altBasePair();   // Sell ALT for BASE
             leg3Side = Side.SELL;
         }
 

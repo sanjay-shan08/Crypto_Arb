@@ -62,7 +62,7 @@ public final class AppConfig {
         this.runtimeSamples = Integer.parseInt(props.getProperty("network.runtime.samples", "3"));
         this.pingEndpoint = props.getProperty("network.ping.endpoint", "/api/v2/public/time");
 
-        String triangleDefs = props.getProperty("triangles", "SOL/BTC/USDT,XRP/BTC/USDT");
+        String triangleDefs = props.getProperty("triangles", "SOL/BTC/USDT,SOL/USDC/USDT");
         this.triangles = Arrays.stream(triangleDefs.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())

@@ -35,8 +35,10 @@ The bot is a **four-layer pipeline** with strict unidirectional data flow:
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                        EXECUTOR LAYER                           │
+│  TradeExecutionService (orchestrates 3 legs)                   │
 │  OrderExecutor ← PaperExecutor / SandboxExecutor / LiveExecutor│
-│  AbortHandler (leg-2 failure recovery)                         │
+│  BitgetApiClient (REST implementation)                         │
+│  AbortHandler (leg-2/3 failure recovery)                       │
 │  Package: com.arb.bitget.executor                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -99,7 +101,7 @@ long getLastUpdateTime();              // epoch millis
 ##### `ArbitrageEngine`
 - Runs on `ScheduledExecutorService` at a **fixed rate of 100ms**.
 - Each tick:
-  1. Iterates over all configured triangles (e.g., SOL/BTC/USDT, XRP/BTC/USDT, etc.).
+  1. Iterates over all configured triangles (e.g., SOL/USDC/USDT, XRP/BTC/USDT, etc.).
   2. For each triangle, reads relevant prices from `PriceCache`.
   3. Passes prices to `RouteCalculator.calculate(triangle)`.
   4. If either route is profitable → creates a `Signal` → enqueues it on `SignalQueue`.
@@ -109,9 +111,9 @@ long getLastUpdateTime();              // epoch millis
 ##### `RouteCalculator`
 - Pure function — no state, no side effects.
 - Accepts a `Triangle` object defining the 3 pairs to evaluate.
-- Calculates two routes for any given triangle (e.g., SOL/BTC/USDT):
-  - **Route A**: USDT → ALT → BTC → USDT
-  - **Route B**: USDT → BTC → ALT → USDT
+- Calculates two routes for any given triangle (e.g., SOL/USDC/USDT):
+  - **Route A**: BASE → ALT → INTER → BASE (e.g., USDT → SOL → USDC → USDT)
+  - **Route B**: BASE → INTER → ALT → BASE (e.g., USDT → USDC → SOL → USDT)
 - All math uses `BigDecimal` with `RoundingMode.HALF_UP` and scale of 8.
 - Returns a `RouteResult` containing: route direction, expected profit (bps), leg prices, leg quantities.
 - Calculates **Net Expected Profit (bps)** by explicitly subtracting configured transaction fees:
@@ -120,7 +122,7 @@ long getLastUpdateTime();              // epoch millis
 
 ##### `Triangle` (model class)
 - Immutable record defining a triangular path: `Triangle(String pairA, String pairB, String pairC)`.
-- Example: `new Triangle("SOLUSDT", "SOLBTC", "BTCUSDT")`.
+- Example: `new Triangle("SOLUSDT", "SOLUSDC", "USDCUSDT")` (for `SOL/USDC/USDT`).
 - Configured via `config.properties` — new triangles can be added without code changes.
 - `PriceCache` subscribes to ticker channels for **all pairs across all configured triangles**.
 
@@ -184,7 +186,7 @@ SignalQueue
     ▼
 RiskGate.evaluate(signal)
     │
-    ├── ACCEPT → OrderExecutor.execute(signal)
+    ├── ACCEPT → TradeExecutionService.execute(signal)
     │
     └── REJECT → signal.incrementRetry()
                    │
@@ -210,6 +212,11 @@ All three implementations are **drop-in replacements** — same interface, same 
 
 #### Implementations
 
+##### `TradeExecutionService`
+- Orchestrates the full 3-leg sequence.
+- Tracks in-flight status using `AtomicBoolean` to prevent overlapping executions.
+- Invokes `AbortHandler` if Leg 2 or Leg 3 fails to fill successfully.
+
 ##### `PaperExecutor`
 - Logs the trade to console/file.
 - Returns a synthetic `OrderResult` with `FILLED` status.
@@ -220,23 +227,27 @@ All three implementations are **drop-in replacements** — same interface, same 
 
 ##### `SandboxExecutor`
 - Makes **real HTTP calls** to Bitget's sandbox/testnet endpoints.
-- Uses sandbox API credentials.
+- Uses `BitgetApiClient` for network operations.
 - Validates the full request/response cycle without risking real funds.
 - Same OkHttp client configuration as `LiveExecutor`.
 
 ##### `LiveExecutor`
 - Production executor — real money, real orders.
+- Uses `BitgetApiClient` for authenticating and placing orders.
 - Uses **OkHttp connection pooling** (`ConnectionPool` with keep-alive) for minimum latency.
 - **CRITICAL**: Must configure `ConnectionPool(5, 5, TimeUnit.MINUTES)` — this single
   config saves ~60ms per leg (~180ms total) by avoiding TCP handshake overhead.
+
+##### `BitgetApiClient`
+- Centralizes Bitget REST API communication.
 - Signs requests with HMAC-SHA256 per Bitget API spec.
 - Implements retry logic for transient HTTP errors (429, 500, 503) with limited attempts.
 
 ##### `AbortHandler`
 - **The most critical safety class in the entire bot.**
-- Triggered when: leg 1 filled successfully, but leg 2 fails (timeout, API error, insufficient balance, etc.).
-- Action: immediately places a **market sell** order to flatten the position acquired in leg 1.
-- Does NOT wait, does NOT retry the original leg 2 — it prioritizes capital preservation.
+- Triggered when: leg 1 filled successfully, but leg 2 or 3 fails.
+- Action: immediately places a **market sell** order to flatten the position.
+- Does NOT wait, does NOT retry the original leg — it prioritizes capital preservation.
 - Logs the abort event at CRITICAL level with full trade context.
 
 #### Execution Flow
@@ -244,18 +255,17 @@ All three implementations are **drop-in replacements** — same interface, same 
 Signal (approved by RiskGate)
     │
     ▼
-OrderExecutor.executeLeg(leg1)
+TradeExecutionService.executeTriangle(signal)
     │
-    ├── SUCCESS → OrderExecutor.executeLeg(leg2)
-    │                 │
-    │                 ├── SUCCESS → OrderExecutor.executeLeg(leg3)
-    │                 │                 │
-    │                 │                 ├── SUCCESS → log profit, done
-    │                 │                 └── FAIL → AbortHandler.abort(leg2Result, leg3Attempt)
-    │                 │
-    │                 └── FAIL → AbortHandler.abort(leg1Result, leg2Attempt)
-    │
-    └── FAIL → log failure, no position taken, safe
+    ├── Leg 1: OrderExecutor.executeLeg(leg1)
+    │   ├── SUCCESS → Leg 2: OrderExecutor.executeLeg(leg2)
+    │   │             ├── SUCCESS → Leg 3: OrderExecutor.executeLeg(leg3)
+    │   │             │             ├── SUCCESS → log profit, done
+    │   │             │             └── FAIL → AbortHandler.abort(leg2Result)
+    │   │             │
+    │   │             └── FAIL → AbortHandler.abort(leg1Result)
+    │   │
+    │   └── FAIL → log failure, no position taken, safe
 ```
 
 #### Leg Risk (Key Concept)
@@ -300,10 +310,12 @@ Main.java
     │     └── NetworkChecker ──► OkHttp, Bitget REST API, ArbitrageEngine
     │
     └── executor/
+          ├── TradeExecutionService ──► OrderExecutor, AbortHandler
           ├── OrderExecutor (interface)
+          ├── BitgetApiClient ──► OkHttp
           ├── PaperExecutor
-          ├── SandboxExecutor ──► OkHttp, Bitget REST API
-          ├── LiveExecutor ──► OkHttp, Bitget REST API
+          ├── SandboxExecutor ──► BitgetApiClient
+          ├── LiveExecutor ──► BitgetApiClient
           └── AbortHandler ──► OrderExecutor
 ```
 

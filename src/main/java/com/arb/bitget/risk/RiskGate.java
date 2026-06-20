@@ -79,7 +79,7 @@ public class RiskGate {
         long age = System.currentTimeMillis() - signal.detectedAt();
         if (age > MAX_SIGNAL_AGE_MS) {
             log.debug("Signal REJECTED (stale): age={}ms, max={}ms, triangle={}",
-                    age, MAX_SIGNAL_AGE_MS, signal.triangle().altUsdtPair());
+                    age, MAX_SIGNAL_AGE_MS, signal.triangle().altBasePair());
             requeue(signal);
             return;
         }
@@ -103,14 +103,14 @@ public class RiskGate {
         // Check 4: Concurrent execution
         if (executionService.isInFlight()) {
             log.debug("Signal REJECTED (trade in-flight), triangle={}",
-                    signal.triangle().altUsdtPair());
+                    signal.triangle().altBasePair());
             requeue(signal);
             return;
         }
 
         // All checks passed — execute
         log.info("Signal ACCEPTED: triangle={}, direction={}, profit={}bps",
-                signal.triangle().altUsdtPair(), signal.direction(), signal.expectedProfitBps());
+                signal.triangle().altBasePair(), signal.direction(), signal.expectedProfitBps());
 
         executionService.execute(signal);
     }
@@ -118,7 +118,7 @@ public class RiskGate {
     private void requeue(Signal signal) {
         if (signal.retryCount() >= MAX_RETRIES) {
             log.debug("Signal DROPPED (max retries={}): triangle={}",
-                    signal.retryCount(), signal.triangle().altUsdtPair());
+                    signal.retryCount(), signal.triangle().altBasePair());
             return;
         }
         signalQueue.put(signal.incrementRetry());

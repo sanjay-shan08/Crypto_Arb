@@ -4,36 +4,43 @@ import java.util.List;
 
 /**
  * Immutable definition of a triangular arbitrage path.
- * Example: Triangle("SOLUSDT", "SOLBTC", "BTCUSDT") for SOL/BTC/USDT.
+ * Supports any intermediary coin — BTC, USDC, ETH, etc.
+ *
+ * <p>Format: ALT / INTER / BASE (e.g. "SOL/USDC/USDT", "TRX/ETH/USDT", "SOL/BTC/USDT").
+ * <ul>
+ *   <li>altBasePair  — ALT quoted in BASE  (e.g. SOLUSDT)</li>
+ *   <li>altInterPair — ALT quoted in INTER (e.g. SOLUSDC)</li>
+ *   <li>interBasePair — INTER quoted in BASE (e.g. USDCUSDT)</li>
+ * </ul>
  *
  * <p>Thread safety: immutable record, safe for concurrent use.
  */
 public record Triangle(
-        String altUsdtPair,
-        String altBtcPair,
-        String btcUsdtPair
+        String altBasePair,
+        String altInterPair,
+        String interBasePair
 ) {
 
     /**
      * Parses a human-readable triangle definition into a Triangle record.
      *
-     * @param definition format: "ALT/BTC/USDT", e.g. "SOL/BTC/USDT"
-     * @return Triangle with resolved pair names (e.g. SOLUSDT, SOLBTC, BTCUSDT)
+     * @param definition format: "ALT/INTER/BASE", e.g. "SOL/USDC/USDT" or "SOL/BTC/USDT"
+     * @return Triangle with resolved pair names (e.g. SOLUSDT, SOLUSDC, USDCUSDT)
      */
     public static Triangle parse(String definition) {
         String[] parts = definition.trim().split("/");
         if (parts.length != 3) {
             throw new IllegalArgumentException(
-                    "Triangle must have 3 parts: ALT/BTC/USDT, got: " + definition);
+                    "Triangle must have 3 parts: ALT/INTER/BASE, got: " + definition);
         }
         String alt = parts[0].trim().toUpperCase();
-        String btc = parts[1].trim().toUpperCase();
-        String usdt = parts[2].trim().toUpperCase();
+        String inter = parts[1].trim().toUpperCase();
+        String base = parts[2].trim().toUpperCase();
 
         return new Triangle(
-                alt + usdt,   // e.g. SOLUSDT
-                alt + btc,    // e.g. SOLBTC
-                btc + usdt    // e.g. BTCUSDT
+                alt + base,    // e.g. SOLUSDT
+                alt + inter,   // e.g. SOLUSDC
+                inter + base   // e.g. USDCUSDT
         );
     }
 
@@ -41,6 +48,6 @@ public record Triangle(
      * Returns all three pair symbols for WebSocket subscription.
      */
     public List<String> allPairs() {
-        return List.of(altUsdtPair, altBtcPair, btcUsdtPair);
+        return List.of(altBasePair, altInterPair, interBasePair);
     }
 }

@@ -92,7 +92,7 @@ public class ArbitrageEngine {
                     );
                     signalQueue.put(signal);
                     log.info("\u001B[32m\u001B[1m[PROFITABLE SIGNAL] triangle={}, direction={}, profit={}bps\u001B[0m",
-                            triangle.altUsdtPair(), result.direction(), result.profitBps());
+                            triangle.altBasePair(), result.direction(), result.profitBps());
                 }
             }
         } catch (Exception e) {

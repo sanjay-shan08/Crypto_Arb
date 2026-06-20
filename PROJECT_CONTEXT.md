@@ -138,7 +138,7 @@ Configuration is loaded from environment variables and/or a `config.properties` 
 | `max.position.usdt` | `1000` | Maximum position size in USDT |
 | `exchange.fee.rate` | `0.001` | Per-trade fee (0.10% default, 0.0008 with BGB) |
 | `exchange.fee.legs` | `3` | Number of legs (for total fee calculation, i.e., 3 legs = 0.30% default fee) |
-| `triangles` | `SOL/BTC/USDT,XRP/BTC/USDT,...` | Comma-separated triangle definitions |
+| `triangles` | `SOL/BTC/USDT,SOL/USDC/USDT,...` | Comma-separated triangle definitions |
 | `network.max.latency.ms` | `400` | Max acceptable round-trip latency (ms) |
 | `network.check.interval.s` | `30` | Interval between runtime latency checks |
 | `network.preflight.samples` | `5` | Number of pings during startup preflight |
@@ -169,15 +169,13 @@ Configuration is loaded from environment variables and/or a `config.properties` 
 
 The bot targets **altcoin triangles** where opportunity windows last 5–30+ seconds,
 avoiding major pairs (BTC/ETH/USDT) where HFT bots dominate with 2–5 second windows.
+By generalizing the `Triangle` model, the bot now supports any intermediary coin (BTC, USDC, ETH), unlocking massive liquidity across new pairs.
 
-| Triangle | Window Duration | Viability |
-|---|---|---|
-| SOL / BTC / USDT | 5–15 sec | ✅ Primary target |
-| XRP / BTC / USDT | 5–20 sec | ✅ Primary target |
-| DOGE / BTC / USDT | 8–25 sec | ✅ Primary target |
-| TRX / BTC / USDT | 10–30 sec | ✅ Comfortable |
-| BGB / BTC / USDT | 10–30 sec | ✅ Also cuts fees via BGB holdings |
-| BTC / ETH / USDT | 2–5 sec | ⚠️ Avoid — too competitive |
+| Intermediary | Target Triangles |
+|---|---|
+| **BTC** | SOL, BGB, ETH |
+| **USDC** | SOL, XRP, ADA, DOGE, LINK, BCH, AVAX, LTC, BGB, BNB, UNI, AAVE, SUI, PEPE |
+| **ETH** | TRX, BGB |
 
 Triangles are configurable in `config.properties` so new ones can be added without code changes.
 
@@ -215,7 +213,7 @@ These must **never** be violated:
 
 ---
 
-## 10. Directory Structure (Planned)
+## 10. Directory Structure
 
 ```
 Bitget_Arb/
@@ -241,6 +239,7 @@ Bitget_Arb/
 │                       ├── engine/
 │                       │   ├── ArbitrageEngine.java
 │                       │   ├── RouteCalculator.java
+│                       │   ├── RouteResult.java
 │                       │   └── SignalQueue.java
 │                       ├── risk/
 │                       │   ├── RiskGate.java
@@ -248,6 +247,8 @@ Bitget_Arb/
 │                       │   └── NetworkChecker.java
 │                       ├── executor/
 │                       │   ├── OrderExecutor.java
+│                       │   ├── TradeExecutionService.java
+│                       │   ├── BitgetApiClient.java
 │                       │   ├── PaperExecutor.java
 │                       │   ├── SandboxExecutor.java
 │                       │   ├── LiveExecutor.java
@@ -255,7 +256,11 @@ Bitget_Arb/
 │                       └── model/
 │                           ├── Signal.java
 │                           ├── OrderResult.java
-│                           └── TradingPair.java
+│                           ├── TradingPair.java
+│                           ├── RouteDirection.java
+│                           ├── Side.java
+│                           ├── PriceEntry.java
+│                           └── Triangle.java
 │   └── test/
 │       └── java/
 │           └── com/

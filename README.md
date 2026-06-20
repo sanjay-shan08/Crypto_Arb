@@ -122,14 +122,14 @@ java -jar target/bitget-arb.jar --mode live
 
 ## 🎯 Target Triangles
 
-| Triangle | Window Duration | Viability |
-|---|---|---|
-| SOL / BTC / USDT | 5–15 sec | ✅ Primary target |
-| XRP / BTC / USDT | 5–20 sec | ✅ Primary target |
-| DOGE / BTC / USDT | 8–25 sec | ✅ Primary target |
-| TRX / BTC / USDT | 10–30 sec | ✅ Comfortable |
-| BGB / BTC / USDT | 10–30 sec | ✅ Also cuts fees via BGB holdings |
-| BTC / ETH / USDT | 2–5 sec | ⚠️ Avoid — too competitive |
+The bot targets **altcoin triangles** where opportunity windows last 5–30+ seconds, avoiding major pairs (BTC/ETH/USDT) where HFT bots dominate with 2–5 second windows.
+The underlying routing math natively supports **any intermediary coin** (e.g., BTC, USDC, ETH) as long as it acts as the quote for the altcoin and the base against USDT.
+
+| Intermediary | Supported Altcoins |
+|---|---|
+| **BTC** | SOL, BGB, ETH |
+| **USDC** | SOL, XRP, ADA, DOGE, LINK, BCH, AVAX, LTC, BGB, BNB, UNI, AAVE, SUI, PEPE |
+| **ETH** | TRX, BGB |
 
 Triangles are configurable in `config/application-*.properties` — new ones can be added without code changes.
 

@@ -26,7 +26,7 @@ public class SignalQueue {
     public void put(Signal signal) {
         queue.add(signal);
         log.debug("Signal enqueued: triangle={}, direction={}, profit={}bps, queueSize={}",
-                signal.triangle().altUsdtPair(), signal.direction(),
+                signal.triangle().altBasePair(), signal.direction(),
                 signal.expectedProfitBps(), queue.size());
     }
 

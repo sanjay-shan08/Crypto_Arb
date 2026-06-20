@@ -26,6 +26,31 @@ Each entry follows this format:
 
 ---
 
+### [2026-06-20] FEAT: Generic Intermediary Support (USDC & ETH Triangles)
+**Status**: ✅ Done
+**Files**: `Triangle.java`, `RouteCalculator.java`, `TradeExecutionService.java`, `config/*`
+**Details**:
+Refactored the bot's core mathematical and routing logic from hardcoded BTC/USDT terminology to a generic `ALT / INTER / BASE` model. 
+- Discovered that the underlying BigDecimal math and Route A/B routing paths inherently supported *any* intermediary coin acting as the quote for the altcoin and the base against USDT.
+- Renamed all record properties (`altUsdtPair` → `altBasePair`), variables, and log statements to use generic terminology.
+- Expanded the paper-trading config to include 14 USDC triangles, 2 ETH triangles, and 3 BTC triangles (19 total active pairs).
+
+---
+
+### [2026-05-31] FEAT: Stage 1 Dev - Core Implementation
+**Status**: ✅ Done
+**Files**: `src/main/java/com/arb/bitget/*`, `pom.xml`, `config/*`
+**Details**:
+Initial implementation of the core bot architecture, mapping precisely to the foundational design documents.
+- Created `TradeExecutionService` to orchestrate 3-leg triangle execution, handling atomic leg state and invoking `AbortHandler` on failure.
+- Implemented `BitgetApiClient` for authenticating and executing REST orders using HMAC-SHA256 signatures and OkHttp connection pooling.
+- Developed all model and configuration classes (`AppConfig`, `PriceEntry`, `RouteDirection`, `Side`, `Signal`, `Triangle`).
+- Created `LiveExecutor`, `SandboxExecutor`, and `PaperExecutor` fulfilling the `OrderExecutor` interface.
+- Built market data stream listeners (`BitgetWebSocketClient`, `PriceCache`) and risk validators (`RiskGate`, `NetworkChecker`, `StartupChecker`).
+- Set up logging (`logback.xml`) and dependency injection wiring in `Main.java`.
+
+---
+
 ### [2026-05-29] DECISION: Dynamic Fee-Aware Net Profit Threshold
 **Status**: ✅ Done
 **Files**: `ARCHITECTURE.md`, `PROJECT_CONTEXT.md`
