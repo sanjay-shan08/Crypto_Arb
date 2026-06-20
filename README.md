@@ -207,7 +207,7 @@ Bitget_Arb/
 
 ## ⚠️ Disclaimer
 
-This bot trades real cryptocurrency. Use at your own risk. The authors are not responsible for any financial losses. Always start with **paper mode** to validate your strategy before risking real funds.
+This bot trades real cryptocurrency. Use at your own risk. The author is not responsible for any financial loss. Always start with **paper mode** to validate your strategy before risking real funds.
 
 NOTE : The bot is under the testing stage right now and observed great performance in the paper mode. It is expected to perform well in the sandbox mode as well. The live mode is yet to be tested. **DO NOT USE BOT UNTIL ALL STAGES OF TESTING ARE OVER!!!**
 
@@ -216,3 +216,7 @@ NOTE : The bot is under the testing stage right now and observed great performan
 ## 📄 License
 
 This project is private and not licensed for public use.
+
+<div align="center">
+  <sub><i>Crafted by <a href="https://www.linkedin.com/in/sanjay-shan">Sanjay Shan</a></i></sub>
+</div>
