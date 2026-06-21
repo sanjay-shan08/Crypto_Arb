@@ -26,6 +26,16 @@ Each entry follows this format:
 
 ---
 
+### [2026-06-22] TEST: Safety Net Test Suite
+**Status**: ✅ Done
+**Files**: `AbortHandlerTest.java`, `RiskGateTest.java`
+**Details**:
+Implemented a comprehensive JUnit test suite focusing on the bot's critical safety invariants:
+- `AbortHandlerTest`: Validates that failed legs correctly trigger a market order reversal (BUY reversing SELL and vice versa) and gracefully handles executor exceptions during the abort sequence.
+- `RiskGateTest`: Mocks the `SignalQueue` and `TradeExecutionService` to verify that stale signals, low-profit signals, outsized positions, and concurrent execution attempts are correctly intercepted and requeued, while valid signals are passed through to the executor.
+
+---
+
 ### [2026-06-20] FEAT: Generic Intermediary Support (USDC & ETH Triangles)
 **Status**: ✅ Done
 **Files**: `Triangle.java`, `RouteCalculator.java`, `TradeExecutionService.java`, `config/*`

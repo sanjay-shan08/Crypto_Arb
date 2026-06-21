@@ -137,7 +137,7 @@ Triangles are configurable in `config/application-*.properties` — new ones can
 
 ## 🛡️ Safety Invariants
 
-These rules are **never** violated:
+These rules are **never** violated, and are continuously verified by a comprehensive JUnit `Safety Net Test` suite:
 
 1. **No stale data trading** — Engine killed if no price update for 5 seconds.
 2. **No unhedged positions** — `AbortHandler` fires immediate market-sell if leg 2/3 fails.

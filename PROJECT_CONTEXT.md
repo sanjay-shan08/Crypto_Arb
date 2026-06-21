@@ -202,7 +202,7 @@ Triangles are configurable in `config.properties` so new ones can be added witho
 
 ## 9. Safety Invariants
 
-These must **never** be violated:
+These must **never** be violated (and are continuously verified by the `Safety Net Test` suite):
 
 1. **No stale data trading** — If `HeartbeatMonitor` detects no price update for 5s, the engine is killed immediately.
 2. **No unhedged positions** — If leg 2 fails after leg 1 fills, `AbortHandler` fires an immediate market-sell.
