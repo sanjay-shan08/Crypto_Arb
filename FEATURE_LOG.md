@@ -64,7 +64,7 @@ Based on user feedback regarding spot trading fees (0.10% per leg / 0.30% total 
 ---
 
 ### [2026-05-26] DECISION: Network Quality Gate (NetworkChecker)
-**Status**: 📋 Planned
+**Status**: ✅ Done
 **Files**: `NetworkChecker.java`, `ARCHITECTURE.md`, `PROJECT_CONTEXT.md`
 **Details**:
 Added a two-phase network quality gate to prevent trading on degraded internet:

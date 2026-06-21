@@ -181,7 +181,7 @@ Triangles are configurable in `config.properties` so new ones can be added witho
 
 ---
 
-## 8.6 Latency Budget (Tiruppur → Bitget Singapore)
+## 8.6 Latency Budget 
 
 | Phase | Latency |
 |---|---|
