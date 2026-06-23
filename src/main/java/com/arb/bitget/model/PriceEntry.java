@@ -13,7 +13,11 @@ public record PriceEntry(
         BigDecimal bestAsk,
         BigDecimal bidSize,
         BigDecimal askSize,
-        long timestamp
+        long timestamp,
+        BigDecimal[] bids,
+        BigDecimal[] bidSizes,
+        BigDecimal[] asks,
+        BigDecimal[] askSizes
 ) {
 
     /**
@@ -26,5 +30,11 @@ public record PriceEntry(
         if (bestBid.compareTo(BigDecimal.ZERO) <= 0 || bestAsk.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Prices must be positive");
         }
+        
+        // Ensure arrays are initialized if not provided
+        if (bids == null) bids = new BigDecimal[]{bestBid};
+        if (bidSizes == null) bidSizes = new BigDecimal[]{bidSize};
+        if (asks == null) asks = new BigDecimal[]{bestAsk};
+        if (askSizes == null) askSizes = new BigDecimal[]{askSize};
     }
 }

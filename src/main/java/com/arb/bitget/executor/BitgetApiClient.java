@@ -204,6 +204,29 @@ public class BitgetApiClient {
         }
     }
 
+    /**
+     * Queries the spot account balances.
+     * Returns a list of asset objects.
+     */
+    public List<JsonObject> getBalances() throws Exception {
+        String path = "/api/v2/spot/account/assets";
+
+        Request request = buildSignedRequest("GET", path, "", "");
+        try (Response response = httpClient.newCall(request).execute()) {
+            String responseBody = response.body() != null ? response.body().string() : "";
+            JsonObject json = gson.fromJson(responseBody, JsonObject.class);
+            String code = json.has("code") ? json.get("code").getAsString() : "";
+            List<JsonObject> assets = new ArrayList<>();
+            if ("00000".equals(code) && json.has("data")) {
+                JsonArray data = json.getAsJsonArray("data");
+                for (int i = 0; i < data.size(); i++) {
+                    assets.add(data.get(i).getAsJsonObject());
+                }
+            }
+            return assets;
+        }
+    }
+
     // =========================================================================
     // Request Signing (HMAC-SHA256 + Base64)
     // =========================================================================

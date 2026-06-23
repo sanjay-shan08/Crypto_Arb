@@ -8,6 +8,8 @@ import com.arb.bitget.model.Triangle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.arb.bitget.risk.CircuitBreaker;
+
 import java.math.BigDecimal;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -33,14 +35,18 @@ public class TradeExecutionService {
 
     private final OrderExecutor executor;
     private final AbortHandler abortHandler;
+    private final CircuitBreaker circuitBreaker;
+    private final BigDecimal feeRate;
     private final AtomicBoolean inFlight = new AtomicBoolean(false);
     private final AtomicLong attemptedCount = new AtomicLong(0);
     private final AtomicLong successfulCount = new AtomicLong(0);
     private final AtomicLong failedCount = new AtomicLong(0);
 
-    public TradeExecutionService(OrderExecutor executor, AbortHandler abortHandler) {
+    public TradeExecutionService(OrderExecutor executor, AbortHandler abortHandler, CircuitBreaker circuitBreaker, BigDecimal feeRate) {
         this.executor = executor;
         this.abortHandler = abortHandler;
+        this.circuitBreaker = circuitBreaker;
+        this.feeRate = feeRate;
     }
 
     /**
@@ -125,6 +131,7 @@ public class TradeExecutionService {
                     leg2Pair, leg2Result.status());
             abortHandler.abort(leg1Result, leg2Pair, leg2Side);
             failedCount.incrementAndGet();
+            if (circuitBreaker != null) circuitBreaker.onAbort();
             return;
         }
         log.info("Leg 2 FILLED: orderId={}, qty={}", leg2Result.orderId(), leg2Result.filledQuantity());
@@ -139,14 +146,27 @@ public class TradeExecutionService {
                     leg3Pair, leg3Result.status());
             abortHandler.abort(leg2Result, leg3Pair, leg3Side);
             failedCount.incrementAndGet();
+            if (circuitBreaker != null) circuitBreaker.onAbort();
             return;
         }
         log.info("Leg 3 FILLED: orderId={}, qty={}", leg3Result.orderId(), leg3Result.filledQuantity());
 
         long elapsed = System.currentTimeMillis() - startTime;
         long totalSuccess = successfulCount.incrementAndGet();
-        log.info("\u001B[32m\u001B[1m=== Triangle execution COMPLETE (Total Successful Arbitrages: {}) === direction={}, expectedProfit={}bps, elapsed={}ms\u001B[0m",
-                totalSuccess, direction, signal.expectedProfitBps(), elapsed);
+
+        // Calculate estimated net realized P&L
+        BigDecimal leg1BaseSpent = leg1Result.filledQuantity().multiply(leg1Result.filledPrice());
+        BigDecimal leg3BaseReceived = leg3Result.filledQuantity().multiply(leg3Result.filledPrice());
+        BigDecimal grossProfit = leg3BaseReceived.subtract(leg1BaseSpent);
+        BigDecimal estimatedFee = leg1BaseSpent.multiply(feeRate).multiply(BigDecimal.valueOf(3));
+        BigDecimal netProfit = grossProfit.subtract(estimatedFee);
+
+        if (circuitBreaker != null) {
+            circuitBreaker.onTradeSuccess(netProfit);
+        }
+
+        log.info("\u001B[32m\u001B[1m=== Triangle execution COMPLETE (Total Successful Arbitrages: {}) === direction={}, netProfit={} USDT, elapsed={}ms\u001B[0m",
+                totalSuccess, direction, netProfit, elapsed);
     }
 
     public long getAttemptedCount() {

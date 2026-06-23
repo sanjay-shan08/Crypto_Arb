@@ -18,6 +18,7 @@ class RiskGateTest {
 
     private SignalQueue signalQueue;
     private TradeExecutionService executionService;
+    private BalanceManager balanceManager;
     private AppConfig config;
     private RiskGate riskGate;
     private Triangle triangle;
@@ -26,12 +27,14 @@ class RiskGateTest {
     void setUp() throws Exception {
         signalQueue = mock(SignalQueue.class);
         executionService = mock(TradeExecutionService.class);
+        balanceManager = mock(BalanceManager.class);
         config = mock(AppConfig.class);
         
         when(config.getMinProfitBps()).thenReturn(new BigDecimal("5"));
         when(config.getMaxPositionUsdt()).thenReturn(new BigDecimal("1000"));
+        when(balanceManager.hasSufficientBalance(anyString(), any())).thenReturn(true);
         
-        riskGate = new RiskGate(signalQueue, executionService, config);
+        riskGate = new RiskGate(signalQueue, executionService, balanceManager, config);
         triangle = Triangle.parse("SOL/USDC/USDT");
     }
 
@@ -105,6 +108,20 @@ class RiskGateTest {
     void evaluate_rejectsWhenTradeInFlight() throws Exception {
         Signal signal = createSignal(System.currentTimeMillis(), "10", "500");
         when(executionService.isInFlight()).thenReturn(true);
+        when(signalQueue.take()).thenReturn(signal).thenThrow(new InterruptedException());
+        
+        riskGate.start();
+        Thread.sleep(50);
+        riskGate.stop();
+        
+        verify(executionService, never()).execute(any());
+        verify(signalQueue).put(argThat(s -> s.retryCount() == 1));
+    }
+
+    @Test
+    void evaluate_rejectsInsufficientBalanceSignal() throws Exception {
+        Signal signal = createSignal(System.currentTimeMillis(), "10", "500");
+        when(balanceManager.hasSufficientBalance(anyString(), any())).thenReturn(false);
         when(signalQueue.take()).thenReturn(signal).thenThrow(new InterruptedException());
         
         riskGate.start();

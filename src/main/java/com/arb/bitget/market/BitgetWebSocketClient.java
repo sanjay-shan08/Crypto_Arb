@@ -39,6 +39,7 @@ public class BitgetWebSocketClient extends WebSocketListener {
     private final OkHttpClient httpClient;
     private final Gson gson;
     private final CountDownLatch firstPriceLatch;
+    private final boolean enableDepthCheck;
 
     private volatile WebSocket webSocket;
     private ScheduledExecutorService pingScheduler;
@@ -46,7 +47,7 @@ public class BitgetWebSocketClient extends WebSocketListener {
     private volatile boolean firstPriceReceived = false;
 
     public BitgetWebSocketClient(String wsUrl, List<String> pairs, PriceCache priceCache,
-                                 ReconnectHandler reconnectHandler, OkHttpClient httpClient) {
+                                 ReconnectHandler reconnectHandler, OkHttpClient httpClient, boolean enableDepthCheck) {
         this.wsUrl = wsUrl;
         this.pairs = pairs;
         this.priceCache = priceCache;
@@ -54,6 +55,7 @@ public class BitgetWebSocketClient extends WebSocketListener {
         this.httpClient = httpClient;
         this.gson = new Gson();
         this.firstPriceLatch = new CountDownLatch(1);
+        this.enableDepthCheck = enableDepthCheck;
     }
 
     /**
@@ -91,7 +93,7 @@ public class BitgetWebSocketClient extends WebSocketListener {
         for (String pair : pairs) {
             JsonObject arg = new JsonObject();
             arg.addProperty("instType", "SPOT");
-            arg.addProperty("channel", "ticker");
+            arg.addProperty("channel", enableDepthCheck ? "books5" : "ticker");
             arg.addProperty("instId", pair);
             args.add(arg);
         }
@@ -150,26 +152,59 @@ public class BitgetWebSocketClient extends WebSocketListener {
             for (JsonElement element : dataArray) {
                 JsonObject data = element.getAsJsonObject();
                 String instId = data.has("instId") ? data.get("instId").getAsString() : null;
+                // Sometimes instId is in 'arg' block, so check there too
+                if (instId == null && json.has("arg")) {
+                    JsonObject arg = json.getAsJsonObject("arg");
+                    instId = arg.has("instId") ? arg.get("instId").getAsString() : null;
+                }
+                
                 if (instId == null) {
                     continue;
                 }
 
-                BigDecimal bidPr = new BigDecimal(data.get("bidPr").getAsString());
-                BigDecimal askPr = new BigDecimal(data.get("askPr").getAsString());
-                BigDecimal bidSz = data.has("bidSz")
-                        ? new BigDecimal(data.get("bidSz").getAsString()) : BigDecimal.ZERO;
-                BigDecimal askSz = data.has("askSz")
-                        ? new BigDecimal(data.get("askSz").getAsString()) : BigDecimal.ZERO;
-                long ts = data.has("ts")
-                        ? Long.parseLong(data.get("ts").getAsString()) : System.currentTimeMillis();
+                PriceEntry entry;
+                
+                if (enableDepthCheck && data.has("bids") && data.has("asks")) {
+                    JsonArray bidsArr = data.getAsJsonArray("bids");
+                    JsonArray asksArr = data.getAsJsonArray("asks");
+                    
+                    if (bidsArr.size() == 0 || asksArr.size() == 0) continue;
 
-                PriceEntry entry = new PriceEntry(bidPr, askPr, bidSz, askSz, ts);
+                    BigDecimal[] bids = new BigDecimal[bidsArr.size()];
+                    BigDecimal[] bidSizes = new BigDecimal[bidsArr.size()];
+                    for (int i = 0; i < bidsArr.size(); i++) {
+                        JsonArray level = bidsArr.get(i).getAsJsonArray();
+                        bids[i] = new BigDecimal(level.get(0).getAsString());
+                        bidSizes[i] = new BigDecimal(level.get(1).getAsString());
+                    }
+
+                    BigDecimal[] asks = new BigDecimal[asksArr.size()];
+                    BigDecimal[] askSizes = new BigDecimal[asksArr.size()];
+                    for (int i = 0; i < asksArr.size(); i++) {
+                        JsonArray level = asksArr.get(i).getAsJsonArray();
+                        asks[i] = new BigDecimal(level.get(0).getAsString());
+                        askSizes[i] = new BigDecimal(level.get(1).getAsString());
+                    }
+                    
+                    long ts = data.has("ts") ? Long.parseLong(data.get("ts").getAsString()) : System.currentTimeMillis();
+                    entry = new PriceEntry(bids[0], asks[0], bidSizes[0], askSizes[0], ts, bids, bidSizes, asks, askSizes);
+                } else if (data.has("bidPr") && data.has("askPr")) {
+                    BigDecimal bidPr = new BigDecimal(data.get("bidPr").getAsString());
+                    BigDecimal askPr = new BigDecimal(data.get("askPr").getAsString());
+                    BigDecimal bidSz = data.has("bidSz") ? new BigDecimal(data.get("bidSz").getAsString()) : BigDecimal.ZERO;
+                    BigDecimal askSz = data.has("askSz") ? new BigDecimal(data.get("askSz").getAsString()) : BigDecimal.ZERO;
+                    long ts = data.has("ts") ? Long.parseLong(data.get("ts").getAsString()) : System.currentTimeMillis();
+
+                    entry = new PriceEntry(bidPr, askPr, bidSz, askSz, ts, null, null, null, null);
+                } else {
+                    continue; // unknown format
+                }
                 priceCache.update(instId, entry);
 
                 if (!firstPriceReceived) {
                     firstPriceReceived = true;
                     firstPriceLatch.countDown();
-                    log.info("First price received: {} bid={} ask={}", instId, bidPr, askPr);
+                    log.info("First price received: {} bid={} ask={}", instId, entry.bestBid(), entry.bestAsk());
                 }
             }
         } catch (Exception e) {

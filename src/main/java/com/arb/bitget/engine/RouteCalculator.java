@@ -24,6 +24,12 @@ public class RouteCalculator {
     private static final BigDecimal BPS_MULTIPLIER = new BigDecimal("10000");
     private static final BigDecimal ONE = BigDecimal.ONE;
 
+    private final boolean enableDepthCheck;
+
+    public RouteCalculator(boolean enableDepthCheck) {
+        this.enableDepthCheck = enableDepthCheck;
+    }
+
     /**
      * Calculates the best arbitrage route for a triangle.
      *
@@ -69,17 +75,21 @@ public class RouteCalculator {
         BigDecimal leg3Price = interBase.bestBid();
 
         // Leg 1: Buy ALT with BASE
-        BigDecimal leg1Qty = capital.divide(leg1Price, SCALE, ROUNDING);
-        BigDecimal altReceived = leg1Qty.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
+        BigDecimal altBeforeFee = getVwapBuyWithQuote(altBase, capital);
+        if (altBeforeFee == null) return RouteResult.noPrices();
+        BigDecimal altReceived = altBeforeFee.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
+        BigDecimal leg1Qty = altBeforeFee;
 
         // Leg 2: Sell ALT for INTER
         BigDecimal leg2Qty = altReceived;
-        BigDecimal interBeforeFee = leg2Qty.multiply(leg2Price).setScale(SCALE, ROUNDING);
+        BigDecimal interBeforeFee = getVwapSellWithBase(altInter, leg2Qty);
+        if (interBeforeFee == null) return RouteResult.noPrices();
         BigDecimal interReceived = interBeforeFee.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
 
         // Leg 3: Sell INTER for BASE
         BigDecimal leg3Qty = interReceived;
-        BigDecimal baseBeforeFee = leg3Qty.multiply(leg3Price).setScale(SCALE, ROUNDING);
+        BigDecimal baseBeforeFee = getVwapSellWithBase(interBase, leg3Qty);
+        if (baseBeforeFee == null) return RouteResult.noPrices();
         BigDecimal baseReceived = baseBeforeFee.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
 
         BigDecimal profit = baseReceived.subtract(capital);
@@ -109,16 +119,21 @@ public class RouteCalculator {
         BigDecimal leg3Price = altBase.bestBid();
 
         // Leg 1: Buy INTER with BASE
-        BigDecimal leg1Qty = capital.divide(leg1Price, SCALE, ROUNDING);
-        BigDecimal interReceived = leg1Qty.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
+        BigDecimal interBeforeFee = getVwapBuyWithQuote(interBase, capital);
+        if (interBeforeFee == null) return RouteResult.noPrices();
+        BigDecimal interReceived = interBeforeFee.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
+        BigDecimal leg1Qty = interBeforeFee;
 
         // Leg 2: Buy ALT with INTER
-        BigDecimal leg2Qty = interReceived.divide(leg2Price, SCALE, ROUNDING);
-        BigDecimal altReceived = leg2Qty.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
+        BigDecimal altBeforeFee = getVwapBuyWithQuote(altInter, interReceived);
+        if (altBeforeFee == null) return RouteResult.noPrices();
+        BigDecimal altReceived = altBeforeFee.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
+        BigDecimal leg2Qty = altBeforeFee;
 
         // Leg 3: Sell ALT for BASE
         BigDecimal leg3Qty = altReceived;
-        BigDecimal baseBeforeFee = leg3Qty.multiply(leg3Price).setScale(SCALE, ROUNDING);
+        BigDecimal baseBeforeFee = getVwapSellWithBase(altBase, leg3Qty);
+        if (baseBeforeFee == null) return RouteResult.noPrices();
         BigDecimal baseReceived = baseBeforeFee.multiply(feeMultiplier).setScale(SCALE, ROUNDING);
 
         BigDecimal profit = baseReceived.subtract(capital);
@@ -132,5 +147,55 @@ public class RouteCalculator {
                 new BigDecimal[]{leg1Qty, leg2Qty, leg3Qty},
                 profitBps.compareTo(BigDecimal.ZERO) > 0
         );
+    }
+
+    /**
+     * Calculates how much BASE asset we receive if we spend quoteAmount of QUOTE asset.
+     */
+    private BigDecimal getVwapBuyWithQuote(PriceEntry entry, BigDecimal quoteAmount) {
+        if (!enableDepthCheck || entry.asks() == null) {
+            return quoteAmount.divide(entry.bestAsk(), SCALE, ROUNDING);
+        }
+        BigDecimal remainingQuote = quoteAmount;
+        BigDecimal totalBaseReceived = BigDecimal.ZERO;
+        for (int i = 0; i < entry.asks().length; i++) {
+            BigDecimal price = entry.asks()[i];
+            BigDecimal size = entry.askSizes()[i];
+            BigDecimal levelQuoteVolume = price.multiply(size);
+
+            if (remainingQuote.compareTo(levelQuoteVolume) <= 0) {
+                BigDecimal takeBase = remainingQuote.divide(price, SCALE, ROUNDING);
+                totalBaseReceived = totalBaseReceived.add(takeBase);
+                return totalBaseReceived;
+            } else {
+                totalBaseReceived = totalBaseReceived.add(size);
+                remainingQuote = remainingQuote.subtract(levelQuoteVolume);
+            }
+        }
+        return null; // Not enough liquidity
+    }
+
+    /**
+     * Calculates how much QUOTE asset we receive if we sell baseAmount of BASE asset.
+     */
+    private BigDecimal getVwapSellWithBase(PriceEntry entry, BigDecimal baseAmount) {
+        if (!enableDepthCheck || entry.bids() == null) {
+            return baseAmount.multiply(entry.bestBid());
+        }
+        BigDecimal remainingBase = baseAmount;
+        BigDecimal totalQuoteReceived = BigDecimal.ZERO;
+        for (int i = 0; i < entry.bids().length; i++) {
+            BigDecimal price = entry.bids()[i];
+            BigDecimal size = entry.bidSizes()[i];
+
+            if (remainingBase.compareTo(size) <= 0) {
+                totalQuoteReceived = totalQuoteReceived.add(remainingBase.multiply(price));
+                return totalQuoteReceived;
+            } else {
+                totalQuoteReceived = totalQuoteReceived.add(size.multiply(price));
+                remainingBase = remainingBase.subtract(size);
+            }
+        }
+        return null; // Not enough liquidity
     }
 }

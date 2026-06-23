@@ -19,7 +19,7 @@ class RouteCalculatorTest {
 
     @BeforeEach
     void setUp() {
-        calculator = new RouteCalculator();
+        calculator = new RouteCalculator(false);
         cache = new PriceCache();
         triangle = Triangle.parse("SOL/USDC/USDT");
     }
@@ -30,7 +30,8 @@ class RouteCalculatorTest {
                 new BigDecimal(ask),
                 BigDecimal.ONE,
                 BigDecimal.ONE,
-                System.currentTimeMillis()
+                System.currentTimeMillis(),
+                null, null, null, null
         );
     }
 

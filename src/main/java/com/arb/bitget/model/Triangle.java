@@ -16,6 +16,9 @@ import java.util.List;
  * <p>Thread safety: immutable record, safe for concurrent use.
  */
 public record Triangle(
+        String altCoin,
+        String interCoin,
+        String baseCoin,
         String altBasePair,
         String altInterPair,
         String interBasePair
@@ -38,6 +41,9 @@ public record Triangle(
         String base = parts[2].trim().toUpperCase();
 
         return new Triangle(
+                alt,
+                inter,
+                base,
                 alt + base,    // e.g. SOLUSDT
                 alt + inter,   // e.g. SOLUSDC
                 inter + base   // e.g. USDCUSDT

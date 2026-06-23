@@ -42,6 +42,11 @@ public final class AppConfig {
     private final int preflightSamples;
     private final int runtimeSamples;
     private final String pingEndpoint;
+    
+    // Safety Net Configs
+    private final BigDecimal maxDailyLossUsdt;
+    private final int maxConsecutiveAborts;
+    private final boolean enableDepthCheck;
 
     private AppConfig(Properties props, String mode) {
         this.mode = mode;
@@ -61,6 +66,11 @@ public final class AppConfig {
         this.preflightSamples = Integer.parseInt(props.getProperty("network.preflight.samples", "5"));
         this.runtimeSamples = Integer.parseInt(props.getProperty("network.runtime.samples", "3"));
         this.pingEndpoint = props.getProperty("network.ping.endpoint", "/api/v2/public/time");
+
+        // Safety Net Configs
+        this.maxDailyLossUsdt = new BigDecimal(props.getProperty("max.daily.loss.usdt", "50"));
+        this.maxConsecutiveAborts = Integer.parseInt(props.getProperty("max.consecutive.aborts", "3"));
+        this.enableDepthCheck = Boolean.parseBoolean(props.getProperty("enable.depth.check", "false"));
 
         String triangleDefs = props.getProperty("triangles", "SOL/BTC/USDT,SOL/USDC/USDT");
         this.triangles = Arrays.stream(triangleDefs.split(","))
@@ -184,5 +194,17 @@ public final class AppConfig {
 
     public String getPingEndpoint() {
         return pingEndpoint;
+    }
+
+    public BigDecimal getMaxDailyLossUsdt() {
+        return maxDailyLossUsdt;
+    }
+
+    public int getMaxConsecutiveAborts() {
+        return maxConsecutiveAborts;
+    }
+
+    public boolean isEnableDepthCheck() {
+        return enableDepthCheck;
     }
 }

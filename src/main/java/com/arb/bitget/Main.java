@@ -115,18 +115,24 @@ public class Main {
         SignalQueue signalQueue = new SignalQueue();
 
         // 9. Instantiate RouteCalculator
-        RouteCalculator routeCalculator = new RouteCalculator();
+        RouteCalculator routeCalculator = new RouteCalculator(config.isEnableDepthCheck());
 
-        // 10. Instantiate TradeExecutionService
-        TradeExecutionService executionService = new TradeExecutionService(orderExecutor, abortHandler);
-
-        // 11. Instantiate RiskGate
-        RiskGate riskGate = new RiskGate(signalQueue, executionService, config);
-
-        // 12. Instantiate ArbitrageEngine
+        // 10. Instantiate ArbitrageEngine
         ArbitrageEngine engine = new ArbitrageEngine(priceCache, routeCalculator, signalQueue, config);
 
-        // 13. Instantiate HeartbeatMonitor
+        // 11. Instantiate CircuitBreaker
+        com.arb.bitget.risk.CircuitBreaker circuitBreaker = new com.arb.bitget.risk.CircuitBreaker(config, engine);
+
+        // 12. Instantiate TradeExecutionService
+        TradeExecutionService executionService = new TradeExecutionService(orderExecutor, abortHandler, circuitBreaker, config.getFeeRate());
+
+        // 13. Instantiate BalanceManager
+        com.arb.bitget.risk.BalanceManager balanceManager = new com.arb.bitget.risk.BalanceManager(apiClient);
+
+        // 14. Instantiate RiskGate
+        RiskGate riskGate = new RiskGate(signalQueue, executionService, balanceManager, config);
+
+        // 14. Instantiate HeartbeatMonitor
         HeartbeatMonitor heartbeatMonitor = new HeartbeatMonitor(
                 priceCache, config.getHeartbeatTimeoutMs(), engine::kill);
 
@@ -135,7 +141,7 @@ public class Main {
 
         // 15. Instantiate WebSocketClient
         BitgetWebSocketClient wsClient = new BitgetWebSocketClient(
-                config.getWsUrl(), allPairs, priceCache, reconnectHandler, httpClient);
+                config.getWsUrl(), allPairs, priceCache, reconnectHandler, httpClient, config.isEnableDepthCheck());
 
         // === Register shutdown hook ===
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -187,6 +193,9 @@ public class Main {
         } else {
             log.info("Paper mode — skipping NetworkChecker preflight");
         }
+
+        // Step 2.5: Initialize BalanceManager
+        balanceManager.initialize();
 
         // Step 3: Connect WebSocket and wait for first price
         wsClient.connect();

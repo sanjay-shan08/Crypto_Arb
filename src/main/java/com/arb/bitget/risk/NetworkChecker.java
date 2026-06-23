@@ -102,7 +102,7 @@ public class NetworkChecker {
         }
 
         if (avgLatency > maxLatencyMs) {
-            log.warn("Network latency high: {}ms (threshold={}ms) — pausing engine",
+            log.warn("\u001B[31mNetwork latency high: {}ms (threshold={}ms) — pausing engine\u001B[0m",
                     avgLatency, maxLatencyMs);
             if (!enginePaused) {
                 onLatencyHigh.run();
@@ -114,7 +114,7 @@ public class NetworkChecker {
                 onLatencyRecovered.run();
                 enginePaused = false;
             } else {
-                log.debug("\u001B[31mNetwork latency OK: {}ms\u001B[0m", avgLatency);
+                log.debug("\u001B[32mNetwork latency OK: {}ms\u001B[0m", avgLatency);
             }
         }
     }
@@ -128,9 +128,9 @@ public class NetworkChecker {
                 long rtt = apiClient.getServerTime();
                 total += rtt;
                 successful++;
-                log.debug("\u001B[31mPing #{}: {}ms\u001B[0m", i + 1, rtt);
+                log.debug("\u001B[32mPing #{}: {}ms\u001B[0m", i + 1, rtt);
             } catch (Exception e) {
-                log.warn("Ping #{} failed: {}", i + 1, e.getMessage());
+                log.warn("\u001B[31mPing #{} failed: {}\u001B[0m", i + 1, e.getMessage());
             }
         }
 

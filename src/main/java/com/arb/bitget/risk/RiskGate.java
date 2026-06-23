@@ -34,14 +34,16 @@ public class RiskGate {
 
     private final SignalQueue signalQueue;
     private final TradeExecutionService executionService;
+    private final BalanceManager balanceManager;
     private final BigDecimal minProfitBps;
     private final BigDecimal maxPositionUsdt;
     private ExecutorService consumerThread;
     private volatile boolean running = false;
 
-    public RiskGate(SignalQueue signalQueue, TradeExecutionService executionService, AppConfig config) {
+    public RiskGate(SignalQueue signalQueue, TradeExecutionService executionService, BalanceManager balanceManager, AppConfig config) {
         this.signalQueue = signalQueue;
         this.executionService = executionService;
+        this.balanceManager = balanceManager;
         this.minProfitBps = config.getMinProfitBps();
         this.maxPositionUsdt = config.getMaxPositionUsdt();
     }
@@ -100,7 +102,15 @@ public class RiskGate {
             return;
         }
 
-        // Check 4: Concurrent execution
+        // Check 4: Pre-flight Balance Verification
+        if (!balanceManager.hasSufficientBalance(signal.triangle().baseCoin(), signal.capitalUsdt())) {
+            log.debug("Signal REJECTED (insufficient balance): required {} {}",
+                    signal.capitalUsdt(), signal.triangle().baseCoin());
+            requeue(signal);
+            return;
+        }
+
+        // Check 5: Concurrent execution
         if (executionService.isInFlight()) {
             log.debug("Signal REJECTED (trade in-flight), triangle={}",
                     signal.triangle().altBasePair());
