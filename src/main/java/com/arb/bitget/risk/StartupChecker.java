@@ -33,6 +33,9 @@ public class StartupChecker {
      * Blocks until complete.
      */
     public void run() throws Exception {
+        log.info("StartupChecker: validating API credentials...");
+        apiClient.testCredentials();
+
         log.info("StartupChecker: scanning for stale orders...");
 
         // Collect unique pairs from all triangles

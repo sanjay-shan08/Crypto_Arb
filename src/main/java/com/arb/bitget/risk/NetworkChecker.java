@@ -114,7 +114,7 @@ public class NetworkChecker {
                 onLatencyRecovered.run();
                 enginePaused = false;
             } else {
-                log.debug("Network latency OK: {}ms", avgLatency);
+                log.debug("\u001B[31mNetwork latency OK: {}ms\u001B[0m", avgLatency);
             }
         }
     }
@@ -128,7 +128,7 @@ public class NetworkChecker {
                 long rtt = apiClient.getServerTime();
                 total += rtt;
                 successful++;
-                log.debug("Ping #{}: {}ms", i + 1, rtt);
+                log.debug("\u001B[31mPing #{}: {}ms\u001B[0m", i + 1, rtt);
             } catch (Exception e) {
                 log.warn("Ping #{} failed: {}", i + 1, e.getMessage());
             }

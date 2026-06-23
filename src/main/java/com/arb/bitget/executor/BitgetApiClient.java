@@ -82,6 +82,25 @@ public class BitgetApiClient {
     // =========================================================================
 
     /**
+     * Tests if the configured API credentials are valid.
+     * Throws an exception if authentication fails.
+     */
+    public void testCredentials() throws Exception {
+        String path = "/api/v2/spot/trade/unfilled-orders";
+        Request request = buildSignedRequest("GET", path, "", "");
+        try (Response response = httpClient.newCall(request).execute()) {
+            String responseBody = response.body() != null ? response.body().string() : "";
+            JsonObject json = gson.fromJson(responseBody, JsonObject.class);
+            String code = json.has("code") ? json.get("code").getAsString() : "";
+            if (!"00000".equals(code)) {
+                String msg = json.has("msg") ? json.get("msg").getAsString() : "unknown";
+                throw new RuntimeException("API authentication failed: " + msg + " (code=" + code + ")");
+            }
+            log.info("API credentials validated successfully.");
+        }
+    }
+
+    /**
      * Places a spot order on Bitget.
      *
      * @param symbol    trading pair (e.g. "SOLUSDT")

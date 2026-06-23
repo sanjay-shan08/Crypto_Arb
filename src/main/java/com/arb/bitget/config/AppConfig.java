@@ -45,9 +45,9 @@ public final class AppConfig {
 
     private AppConfig(Properties props, String mode) {
         this.mode = mode;
-        this.apiKey = props.getProperty("bitget.api.key", "");
-        this.apiSecret = props.getProperty("bitget.api.secret", "");
-        this.apiPassphrase = props.getProperty("bitget.api.passphrase", "");
+        this.apiKey = props.getProperty("bitget.api.key", "").trim();
+        this.apiSecret = props.getProperty("bitget.api.secret", "").trim();
+        this.apiPassphrase = props.getProperty("bitget.api.passphrase", "").trim();
         this.wsUrl = props.getProperty("bitget.ws.url", "wss://ws.bitget.com/v2/ws/public");
         this.restUrl = props.getProperty("bitget.rest.url", "https://api.bitget.com");
         this.engineTickMs = Long.parseLong(props.getProperty("engine.tick.ms", "100"));
