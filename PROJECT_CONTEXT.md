@@ -141,6 +141,9 @@ Configuration is loaded from environment variables and/or a `config.properties` 
 | `triangles` | `SOL/BTC/USDT,SOL/USDC/USDT,...` | Comma-separated triangle definitions |
 | `network.max.latency.ms` | `600` | Max acceptable round-trip latency (ms) |
 | `network.check.interval.s` | `30` | Interval between runtime latency checks |
+| `max.daily.loss.usdt` | `50` | Circuit breaker: daily loss limit in USDT |
+| `max.consecutive.aborts` | `3` | Circuit breaker: max consecutive failed trades before halting |
+| `enable.depth.check` | `false` | Enable VWAP orderbook depth traversal for exact slippage calculation |
 | `network.preflight.samples` | `5` | Number of pings during startup preflight |
 | `network.runtime.samples` | `3` | Number of pings per runtime check |
 | `network.ping.endpoint` | `/api/v2/public/time` | Lightweight endpoint for latency measurement |
@@ -208,8 +211,9 @@ These must **never** be violated (and are continuously verified by the `Safety N
 2. **No unhedged positions** — If leg 2 fails after leg 1 fills, `AbortHandler` fires an immediate market-sell.
 3. **Clean startup** — `StartupChecker` validates API credentials and cancels all stale orders before the engine starts.
 4. **Rejected signals are re-queued, never dropped** — A risk rejection is temporary; the condition may clear on the next tick.
-5. **BigDecimal everywhere** — No `double` or `float` for any financial calculation.
-6. **No high-latency trading** — If average round-trip to Bitget exceeds `network.max.latency.ms`, the engine is paused until latency recovers. At startup, the bot refuses to run at all.
+5. **Pre-flight Balance Verification** — `RiskGate` queries `BalanceManager` to ensure sufficient funds exist *before* a signal is approved.
+6. **Circuit Breaker** — `TradeExecutionService` tracks consecutive aborts and net daily profit. If either threshold is breached, the bot halts trading.
+7. **No high-latency trading** — If average round-trip to Bitget exceeds `network.max.latency.ms`, the engine is paused until latency recovers. At startup, the bot refuses to run at all.
 
 ---
 

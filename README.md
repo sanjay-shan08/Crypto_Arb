@@ -12,6 +12,7 @@ This bot is specifically optimized to target **altcoin triangles** (e.g., SOL, X
 * **Network Quality Gate**: Refuses to trade if your local internet latency to Bitget Singapore exceeds 600ms (`NetworkChecker`).
 * **Stale Data Prevention**: Kills the engine instantly if WebSocket price updates pause for >5 seconds (`HeartbeatMonitor`).
 * **Multi-Triangle Engine**: Scans multiple configurable altcoin triangles concurrently.
+* **VWAP Orderbook Routing**: Optionally scans the full orderbook depth to calculate exact slippage and Volume-Weighted Average Price, ensuring profit projections survive market execution.
 * **Latency Optimized**: Uses explicit OkHttp `ConnectionPool` configurations to save ~180ms per triangular execution.
 * **Precision Math**: Enforces strict `BigDecimal` math (no `float` or `double`) to prevent exchange rejection due to rounding errors.
 * **Fee-Aware Profit Calculation**: Dynamically deducts exchange fees (including BGB discount) before signal generation — never executes a trade where fees would wipe the spread.
@@ -140,11 +141,13 @@ Triangles are configurable in `config/application-*.properties` — new ones can
 These rules are **never** violated, and are continuously verified by a comprehensive JUnit `Safety Net Test` suite:
 
 1. **No stale data trading** — Engine killed if no price update for 5 seconds.
-2. **No unhedged positions** — `AbortHandler` fires immediate market-sell if leg 2/3 fails.
-3. **Clean startup** — API credentials validated and all stale orders cancelled before engine starts.
-4. **No high-latency trading** — Engine paused if round-trip latency exceeds 600ms.
-5. **BigDecimal everywhere** — No `double` or `float` for financial math.
-6. **Rejected signals re-queued** — Never dropped (with retry limit to prevent infinite loops).
+2. **Pre-flight Balance Verification** — The RiskGate ensures fully backed capital before approving any trade.
+3. **No unhedged positions** — `AbortHandler` fires immediate market-sell if leg 2/3 fails.
+4. **Circuit Breaker** — Hard halt on trading if daily loss limits or consecutive abort thresholds are breached.
+5. **Clean startup** — API credentials validated and all stale orders cancelled before engine starts.
+6. **No high-latency trading** — Engine paused if round-trip latency exceeds 600ms.
+7. **BigDecimal everywhere** — No `double` or `float` for financial math.
+8. **Rejected signals re-queued** — Never dropped (with retry limit to prevent infinite loops).
 
 ---
 

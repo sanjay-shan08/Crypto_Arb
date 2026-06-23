@@ -26,7 +26,9 @@ The bot is a **four-layer pipeline** with strict unidirectional data flow:
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                          RISK LAYER                             │
-│  RiskGate (accept / reject+requeue)                            │
+│  RiskGate (balance check, accept / reject+requeue)             │
+│  CircuitBreaker (max daily loss, max consecutive aborts)       │
+│  BalanceManager (pre-flight capital verification)              │
 │  StartupChecker (boot-time only)                               │
 │  NetworkChecker (latency monitor)                              │
 │  Package: com.arb.bitget.risk                                  │
@@ -114,6 +116,7 @@ long getLastUpdateTime();              // epoch millis
 - Calculates two routes for any given triangle (e.g., SOL/USDC/USDT):
   - **Route A**: BASE → ALT → INTER → BASE (e.g., USDT → SOL → USDC → USDT)
   - **Route B**: BASE → INTER → ALT → BASE (e.g., USDT → USDC → SOL → USDT)
+- **VWAP Depth Check**: If `enableDepthCheck` is true, instead of taking top-of-book prices, it iterates through orderbook depth (`asks`/`bids`) to calculate the exact received amount (Volume-Weighted Average Price) based on the input capital, simulating precise slippage.
 - All math uses `BigDecimal` with `RoundingMode.HALF_UP` and scale of 8.
 - Returns a `RouteResult` containing: route direction, expected profit (bps), leg prices, leg quantities.
 - Calculates **Net Expected Profit (bps)** by explicitly subtracting configured transaction fees:
@@ -157,11 +160,17 @@ record Signal(
 - Consumes signals from `SignalQueue`.
 - Applies checks in order:
   1. **Staleness check**: `now - signal.detectedAt < MAX_SIGNAL_AGE_MS` (e.g., 500ms).
-  2. **Minimum net profit check**: `signal.expectedProfit >= MIN_PROFIT_BPS` (ensures the net profit after all fees is at least the target take-home margin, e.g., 5 bps).
+  2. **Minimum net profit check**: `signal.expectedProfit >= MIN_PROFIT_BPS`.
   3. **Position size check**: total exposure ≤ `MAX_POSITION_USDT`.
-  4. **Concurrent execution check**: no other trade currently in-flight.
+  4. **Pre-flight Balance check**: `balanceManager.hasSufficientBalance(baseCoin, capital)`.
+  5. **Concurrent execution check**: no other trade currently in-flight.
 - **On accept**: passes signal to `OrderExecutor`.
-- **On reject**: re-enqueues the signal back to `SignalQueue` (with a re-queue counter to prevent infinite loops; drop after N retries).
+- **On reject**: re-enqueues the signal back to `SignalQueue` (with a re-queue counter to prevent infinite loops).
+
+##### `CircuitBreaker`
+- Receives callbacks from `TradeExecutionService`.
+- Tracks `netProfit` via `onTradeSuccess()` and aborts via `onAbort()`.
+- Halts trading completely if `maxConsecutiveAborts` or `maxDailyLossUsdt` is breached.
 
 ##### `StartupChecker`
 - Runs **once** during boot, **before** the engine starts.
@@ -217,6 +226,7 @@ All three implementations are **drop-in replacements** — same interface, same 
 - Orchestrates the full 3-leg sequence.
 - Tracks in-flight status using `AtomicBoolean` to prevent overlapping executions.
 - Invokes `AbortHandler` if Leg 2 or Leg 3 fails to fill successfully.
+- Integrates with `CircuitBreaker` by triggering `onAbort()` on failures and `onTradeSuccess(netProfit)` upon successful completion of Leg 3.
 
 ##### `PaperExecutor`
 - Logs the trade to console/file.

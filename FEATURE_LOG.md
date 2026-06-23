@@ -26,6 +26,16 @@ Each entry follows this format:
 
 ---
 
+### [2026-06-24] FEAT: Advanced Safety Net (Circuit Breaker & VWAP Depth)
+**Status**: ✅ Done
+**Files**: `AppConfig.java`, `TradeExecutionService.java`, `Triangle.java`, `RiskGate.java`, `RouteCalculator.java`
+**Details**:
+- **VWAP Orderbook Depth Routing**: `RouteCalculator` now optionally scans full orderbook depth (`asks`/`bids`) instead of relying solely on top-of-book prices. When `enableDepthCheck` is true, it iterates down the orderbook levels to calculate the exact slippage-adjusted Received Amount (VWAP) for the requested trade size.
+- **Circuit Breaker Integration**: `TradeExecutionService` now feeds back into a `CircuitBreaker` module. It tracks `netProfit` on successful trades and triggers `onAbort()` for failed legs. This enforces two new critical thresholds: `maxConsecutiveAborts` and `maxDailyLossUsdt`.
+- **Pre-flight Balance Verification**: Added `baseCoin` isolation to the `Triangle` model, allowing `RiskGate` to invoke `BalanceManager.hasSufficientBalance` before a signal is approved. This guarantees the bot never attempts to trade without fully backed capital.
+
+---
+
 ### [2026-06-23] FEAT: API Credential Validation & Config Resilience
 **Status**: ✅ Done
 **Files**: `StartupChecker.java`, `BitgetApiClient.java`, `AppConfig.java`, `application-paper.properties`, `NetworkChecker.java`
