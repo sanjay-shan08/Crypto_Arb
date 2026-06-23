@@ -139,7 +139,7 @@ Configuration is loaded from environment variables and/or a `config.properties` 
 | `exchange.fee.rate` | `0.001` | Per-trade fee (0.10% default, 0.0008 with BGB) |
 | `exchange.fee.legs` | `3` | Number of legs (for total fee calculation, i.e., 3 legs = 0.30% default fee) |
 | `triangles` | `SOL/BTC/USDT,SOL/USDC/USDT,...` | Comma-separated triangle definitions |
-| `network.max.latency.ms` | `400` | Max acceptable round-trip latency (ms) |
+| `network.max.latency.ms` | `600` | Max acceptable round-trip latency (ms) |
 | `network.check.interval.s` | `30` | Interval between runtime latency checks |
 | `network.preflight.samples` | `5` | Number of pings during startup preflight |
 | `network.runtime.samples` | `3` | Number of pings per runtime check |
@@ -206,7 +206,7 @@ These must **never** be violated (and are continuously verified by the `Safety N
 
 1. **No stale data trading** — If `HeartbeatMonitor` detects no price update for 5s, the engine is killed immediately.
 2. **No unhedged positions** — If leg 2 fails after leg 1 fills, `AbortHandler` fires an immediate market-sell.
-3. **Clean startup** — `StartupChecker` cancels all stale orders before the engine starts.
+3. **Clean startup** — `StartupChecker` validates API credentials and cancels all stale orders before the engine starts.
 4. **Rejected signals are re-queued, never dropped** — A risk rejection is temporary; the condition may clear on the next tick.
 5. **BigDecimal everywhere** — No `double` or `float` for any financial calculation.
 6. **No high-latency trading** — If average round-trip to Bitget exceeds `network.max.latency.ms`, the engine is paused until latency recovers. At startup, the bot refuses to run at all.

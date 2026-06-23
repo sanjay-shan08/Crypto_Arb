@@ -26,6 +26,18 @@ Each entry follows this format:
 
 ---
 
+### [2026-06-23] FEAT: API Credential Validation & Config Resilience
+**Status**: ✅ Done
+**Files**: `StartupChecker.java`, `BitgetApiClient.java`, `AppConfig.java`, `application-paper.properties`, `NetworkChecker.java`
+**Details**:
+- Added `testCredentials()` to `BitgetApiClient` which pings `/api/v2/spot/trade/unfilled-orders` to validate API keys before the engine starts. 
+- Integrated this credential validation as the first step in `StartupChecker`.
+- Added `.trim()` to credential loading in `AppConfig` to prevent accidental whitespace issues.
+- Bumped `network.max.latency.ms` threshold from 400ms to 600ms in `application-paper.properties` to allow for realistic geographical latency without constant engine pausing.
+- Added ANSI red coloring to latency debug logs for better visibility.
+
+---
+
 ### [2026-06-22] TEST: Safety Net Test Suite
 **Status**: ✅ Done
 **Files**: `AbortHandlerTest.java`, `RiskGateTest.java`

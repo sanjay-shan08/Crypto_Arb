@@ -9,7 +9,7 @@ This bot is specifically optimized to target **altcoin triangles** (e.g., SOL, X
 ## 🚀 Key Features
 
 * **Capital Preservation First**: Built with aggressive risk management. The `AbortHandler` immediately liquidates positions if a leg fails, preventing unhedged exposure.
-* **Network Quality Gate**: Refuses to trade if your local internet latency to Bitget Singapore exceeds 400ms (`NetworkChecker`).
+* **Network Quality Gate**: Refuses to trade if your local internet latency to Bitget Singapore exceeds 600ms (`NetworkChecker`).
 * **Stale Data Prevention**: Kills the engine instantly if WebSocket price updates pause for >5 seconds (`HeartbeatMonitor`).
 * **Multi-Triangle Engine**: Scans multiple configurable altcoin triangles concurrently.
 * **Latency Optimized**: Uses explicit OkHttp `ConnectionPool` configurations to save ~180ms per triangular execution.
@@ -141,8 +141,8 @@ These rules are **never** violated, and are continuously verified by a comprehen
 
 1. **No stale data trading** — Engine killed if no price update for 5 seconds.
 2. **No unhedged positions** — `AbortHandler` fires immediate market-sell if leg 2/3 fails.
-3. **Clean startup** — All stale orders cancelled before engine starts.
-4. **No high-latency trading** — Engine paused if round-trip latency exceeds 400ms.
+3. **Clean startup** — API credentials validated and all stale orders cancelled before engine starts.
+4. **No high-latency trading** — Engine paused if round-trip latency exceeds 600ms.
 5. **BigDecimal everywhere** — No `double` or `float` for financial math.
 6. **Rejected signals re-queued** — Never dropped (with retry limit to prevent infinite loops).
 
@@ -209,7 +209,7 @@ Bitget_Arb/
 
 This bot trades real cryptocurrency. Use at your own risk. The author is not responsible for any financial loss. Always start with **paper mode** to validate your strategy before risking real funds.
 
-NOTE : The bot is under the testing stage right now and observed great performance in the paper mode. It is expected to perform well in the sandbox mode as well. The live mode is yet to be tested. **DO NOT USE BOT UNTIL ALL STAGES OF TESTING ARE OVER!!!**
+NOTE : The bot is under the testing stage right now and observed great performance in the paper mode. Sandbox testing in progress. The live mode is yet to be tested. **DO NOT USE BOT UNTIL ALL STAGES OF TESTING ARE OVER!!!**
 
 ---
 

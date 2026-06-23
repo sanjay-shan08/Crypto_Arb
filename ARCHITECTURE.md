@@ -165,6 +165,7 @@ record Signal(
 
 ##### `StartupChecker`
 - Runs **once** during boot, **before** the engine starts.
+- Validates API credentials by calling `apiClient.testCredentials()`.
 - Queries Bitget REST API for all open orders.
 - Cancels any stale orders from a previous crash.
 - Logs every cancelled order with orderId and pair.
@@ -173,7 +174,7 @@ record Signal(
 ##### `NetworkChecker`
 - Measures REST API round-trip latency to Bitget servers.
 - **At startup**: Runs before the engine starts. Sends 5 pings to `GET /api/v2/public/time` (Bitget's server-time endpoint — lightweight, no auth required). Calculates average round-trip.
-- **If average latency > `MAX_ACCEPTABLE_LATENCY_MS` (default: 400ms)** → refuses to start. Logs CRITICAL with measured latency and threshold. Exits with non-zero code.
+- **If average latency > `MAX_ACCEPTABLE_LATENCY_MS` (default: 600ms)** → refuses to start. Logs CRITICAL with measured latency and threshold. Exits with non-zero code.
 - **During operation**: Runs on a scheduled thread every 30 seconds. Sends 3 pings, calculates rolling average.
 - **If runtime latency exceeds threshold** → pauses `ArbitrageEngine` (stops the scheduled tick). Does NOT close WebSocket (prices keep updating). Resumes automatically when next check passes.
 - **If latency recovers below threshold** → resumes engine, logs INFO with recovered latency.
@@ -240,6 +241,7 @@ All three implementations are **drop-in replacements** — same interface, same 
 
 ##### `BitgetApiClient`
 - Centralizes Bitget REST API communication.
+- Provides `testCredentials()` to explicitly validate API keys.
 - Signs requests with HMAC-SHA256 per Bitget API spec.
 - Implements retry logic for transient HTTP errors (429, 500, 503) with limited attempts.
 
@@ -383,7 +385,7 @@ Shutdown Hook (SIGINT / SIGTERM)
 | API server error (5xx) | `LiveExecutor` | Retry with backoff (max 3 attempts) |
 | Invalid signal (stale) | `RiskGate` | Drop signal, log warning |
 | Startup stale orders | `StartupChecker` | Cancel all open orders before engine start |
-| High network latency (>400ms) | `NetworkChecker` | Pause engine until latency recovers |
+| High network latency (>600ms) | `NetworkChecker` | Pause engine until latency recovers |
 | Startup latency too high | `NetworkChecker` | Refuse to start, exit with error |
 | Unhandled exception | `Thread.UncaughtExceptionHandler` | Log CRITICAL, attempt graceful shutdown |
 
